@@ -43,3 +43,45 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 原创部分使用 [MIT License](LICENSE.txt)。第三方组件遵守各自许可，项目的 MIT 许可不替代它们；上游许可、来源和 TinyCC 对应源码保留在各版本的 `licenses/` 中。
 
 第三方说明：[第一代](git-project1/licenses/THIRD_PARTY_NOTICES.txt)、[第二代](git-project2/licenses/THIRD_PARTY_NOTICES.txt)、[第三代](git-project3/licenses/THIRD_PARTY_NOTICES.txt)。
+
+
+# 开箱即用的编译后的包
+
+通过网盘分享的文件：1.9版本说明.zip
+
+链接: https://pan.baidu.com/s/1vc0cRYVTq8qNAdX63zw6vw?pwd=utju 提取码: utju 
+
+--来自百度网盘超级会员v3的分享
+
+版本：0.1.9。AI现在可以打毒机了，有望成为人最难打的AI。
+
+~~~~
+
+通过网盘分享的文件：TH09-AI-v2.0.6.zip
+
+链接: https://pan.baidu.com/s/1JbiRR1Pmu1wG2Ndn8JOR3w?pwd=46wd 提取码: 46wd 
+
+--来自百度网盘超级会员v3的分享
+
+
+
+版本：0.2.7。AI去除停枪，随机C行为，主动打连爆，主动放C2，可以成为开花机练习器
+
+~~~~~
+
+
+
+~~~~
+
+通过网盘分享的文件：3.3文档.zip
+
+链接: https://pan.baidu.com/s/1iLfB1w05iiOxPRTXKdpyeA?pwd=pfwr 提取码: pfwr 
+
+--来自百度网盘超级会员v3的分享
+
+
+
+版本：0.3.3。AI添加自定义注意力 视野 1秒操作次数配置，设置AI难度，更像人（参数不同决定灵梦的C2白弹圈C不C）
+
+三个版本在TH09.exe同级文件夹下解压就可以玩
+
