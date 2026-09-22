@@ -1,0 +1,543 @@
+{
+  "schema_version": 1,
+  "dependencies": [
+    {
+      "name": "ka_ai_duka-runtime",
+      "repository": "https://github.com/ide-an/ka_ai_duka",
+      "version": "ver1.7",
+      "commit": "668e3921af5277f42b9bbebfbb58aa72bd089a35",
+      "url": "https://github.com/ide-an/ka_ai_duka/releases/download/ver1.7/ka_ai_duka_1_7_20150712.zip",
+      "archive": "ka_ai_duka_1_7_20150712.zip",
+      "size": 438606,
+      "sha256": "f6d54aac94995363dbdddfece66ae53c5eb2c4816b0d29fac31a0110b8d3c80b",
+      "archive_prefix": "ka_ai_duka/",
+      "destination": "vendor/release/ka_ai_duka",
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "size": 1067,
+          "sha256": "988a0bdf61e37f35199dab74cf3fedbd4d5edcee65da51c4069d96c85aad791a"
+        },
+        {
+          "path": "inject.dll",
+          "size": 443392,
+          "sha256": "2ba67f1f80ebe53f978dc6843777764b5ead911a688c89c9cd68cc8c2d9cae00"
+        },
+        {
+          "path": "ka_ai_duka.exe",
+          "size": 198144,
+          "sha256": "625affd9f34e7580b4ddc9062f4c9a0aeb8829c46eb1f5d01928c1bc09b2f625"
+        },
+        {
+          "path": "readme.txt",
+          "size": 4334,
+          "sha256": "ec6c97eff7a1ae782730ef9b6cf09dd4c7cf38555f946b624a2368e6ccef6599"
+        }
+      ]
+    },
+    {
+      "name": "ka_ai_duka-source",
+      "repository": "https://github.com/ide-an/ka_ai_duka",
+      "version": "fixed-master-snapshot",
+      "commit": "94e4d4576ae7b23f9cf10976e163cecb253b3fa6",
+      "url": "https://codeload.github.com/ide-an/ka_ai_duka/zip/94e4d4576ae7b23f9cf10976e163cecb253b3fa6",
+      "archive": "ka_ai_duka-94e4d4576ae7b23f9cf10976e163cecb253b3fa6.zip",
+      "size": 297988,
+      "sha256": "a198c8bc8ac09cc46006ecd943cabe868ac7a63eb3c651ee41af10bd216547b9",
+      "archive_prefix": "ka_ai_duka-94e4d4576ae7b23f9cf10976e163cecb253b3fa6/",
+      "destination": "vendor/ka_ai_duka-src",
+      "files": [
+        {
+          "path": ".gitignore",
+          "size": 2828,
+          "sha256": "7c08a0916cb5781d8a73e5a0edfa439f1d64a0f30f4b8391ae07ba4212c8b51a"
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1069,
+          "sha256": "93d9c3ab5f8961ade92cea03d0a16eff1c038a4b6a6dceaa64d40a7eb6864602"
+        },
+        {
+          "path": "README.md",
+          "size": 400,
+          "sha256": "bc7062de01131a07e5bc33ee90598fea53ffbf7ef4fdc6aabcbf4a1c01d1b611"
+        },
+        {
+          "path": "appveyor.yml",
+          "size": 575,
+          "sha256": "0930aa0ceac79918b77e464adc109b9a47048e167b5e1da69867c586176e4349"
+        },
+        {
+          "path": "common/common.cpp",
+          "size": 5416,
+          "sha256": "6f7a0356860f39b62a7c59428d8e109966b36a517f563e5a304b84409dec20b2"
+        },
+        {
+          "path": "common/common.h",
+          "size": 2244,
+          "sha256": "8253f91102138fb9b05d9f2b2e7d36c120e2f6c00cdf2c6b9a437ecdedc94d7c"
+        },
+        {
+          "path": "common/common.vcxproj",
+          "size": 3861,
+          "sha256": "79d1784ee849444824c0e951dd09d53105e71460ffd42c8dd01373cf162563fa"
+        },
+        {
+          "path": "common/common.vcxproj.filters",
+          "size": 1351,
+          "sha256": "493c61131fd2169f65e83618881f6c18132753d48bea858dd0a0e52f641990a7"
+        },
+        {
+          "path": "common/errorhandle.cpp",
+          "size": 196,
+          "sha256": "938636766381b44b9d30ccca95d002673022d8843d8e82467069f18fa3ac2822"
+        },
+        {
+          "path": "common/errorhandle.h",
+          "size": 105,
+          "sha256": "21e885f24fdcbb145247855db498b11c10f9fc721812316cfa3e3c4e15a0c37a"
+        },
+        {
+          "path": "deploy.py",
+          "size": 703,
+          "sha256": "4b71c74fd02c0f3f389c4e49c8e91e15dbffa41ec51fca1584e348b555a72cc8"
+        },
+        {
+          "path": "inject/AIManager.cpp",
+          "size": 3447,
+          "sha256": "09dde5fc332ce9e09925f13275457c5217eac56daaae8c8bb49cbe6370483b53"
+        },
+        {
+          "path": "inject/AIManager.h",
+          "size": 957,
+          "sha256": "2fb74580d10d666e12dcb1926b1f479dc81a3eca77ddc77cf192fe3323149b2f"
+        },
+        {
+          "path": "inject/Bullet.cpp",
+          "size": 675,
+          "sha256": "972643190a297d91851b454733f9e90890353f92b341a6314b2fe354accba40a"
+        },
+        {
+          "path": "inject/Bullet.h",
+          "size": 4233,
+          "sha256": "70a3c877344aca9c7db0c6d2ae05f6cbe3b02c076c20c01b10f051f7e7255523"
+        },
+        {
+          "path": "inject/DrawUtil.h",
+          "size": 4480,
+          "sha256": "ebc6cea58b7fabd1b16d797913a7117760587ab663a9cc33902d508b06011451"
+        },
+        {
+          "path": "inject/Enemy.cpp",
+          "size": 1698,
+          "sha256": "af326718b8f432cab2e375ac2ce5ed42bd84f2df61c5078f38c566a2fd991808"
+        },
+        {
+          "path": "inject/Enemy.h",
+          "size": 2352,
+          "sha256": "36aac4f47210e778605704a1f87b3e465bc500613546958054c951ff3e89430c"
+        },
+        {
+          "path": "inject/ExAttack.cpp",
+          "size": 7682,
+          "sha256": "6f5559614374e526ab9ed87a156495f4a6eac82bdbe6bb04089f1eb5a1860b7a"
+        },
+        {
+          "path": "inject/ExAttack.h",
+          "size": 7828,
+          "sha256": "d96dcf23c9af78f46ce4c87a17254c6360e4e2ef6817e6c50010cd06470f5d97"
+        },
+        {
+          "path": "inject/GameSide.cpp",
+          "size": 7474,
+          "sha256": "1b53fda3e8794fcef60a84bae32f0fd3479f38207eb2bf83959938b68426caf6"
+        },
+        {
+          "path": "inject/GameSide.h",
+          "size": 3505,
+          "sha256": "1cf08e4bc0804ed42ff0ac1ab02f8f08981a04da3d5ce14c28b2f4cfd89b405d"
+        },
+        {
+          "path": "inject/Item.h",
+          "size": 2234,
+          "sha256": "972678f55fddc8a1f4bd48703c519f1a44c80efb36d037ce9f85b666974da0ab"
+        },
+        {
+          "path": "inject/Player.h",
+          "size": 4299,
+          "sha256": "261d547edf5d73ed494cb91ca74ff6c9822530a65cdb1d840077a7192d8343c0"
+        },
+        {
+          "path": "inject/TH9Monitor.cpp",
+          "size": 3346,
+          "sha256": "3917c509de6f93383c4b3b6c92da29e05096947a52546ff3ea806b16c5293e00"
+        },
+        {
+          "path": "inject/TH9Monitor.h",
+          "size": 5152,
+          "sha256": "4dc3f3e7edc5dac4d13c81f6c87de7461ee56fdcf964904aff40e0e674b2e8a3"
+        },
+        {
+          "path": "inject/TH9ver1_0Monitor.cpp",
+          "size": 3905,
+          "sha256": "74e4355cf72695cfb2aefcf9db75ff0a73b223e2b7a9af1d6e254cd9e4d77ce9"
+        },
+        {
+          "path": "inject/TH9ver1_5aMonitor.cpp",
+          "size": 4135,
+          "sha256": "c5236c12e6345b748eaa97bac44e1f0827f0d20ec924536320d3cdf209c655f9"
+        },
+        {
+          "path": "inject/bind.cpp",
+          "size": 19275,
+          "sha256": "26be36780acdb16ab3a905428737760522f52b985e804251144302b9bc0910eb"
+        },
+        {
+          "path": "inject/bind.h",
+          "size": 370,
+          "sha256": "e91839487114b8e8eab69ae95a3619cb01fa74053e1cb6bd37c01b06887e0e9e"
+        },
+        {
+          "path": "inject/hitTest.cpp",
+          "size": 3051,
+          "sha256": "0140d3222da34956a6f3b4bae72f141f24051b09a4900885a1db3dfd877b55a0"
+        },
+        {
+          "path": "inject/hitTest.h",
+          "size": 4451,
+          "sha256": "a89fcf0a34a8289b5627f1932ba39cb7f6bfbe8e3f21f9a7deaed08c6351ef81"
+        },
+        {
+          "path": "inject/idgen.h",
+          "size": 381,
+          "sha256": "490e2236098368d5f412cfd7096ef12fbdcca6a37f92815564fd51fe7a5ea4ff"
+        },
+        {
+          "path": "inject/inject.vcxproj",
+          "size": 6327,
+          "sha256": "27ed5a9179b637f970591b5480a0ee73a3dcc6653019ea98545b3ffd841f29a7"
+        },
+        {
+          "path": "inject/inject.vcxproj.filters",
+          "size": 4396,
+          "sha256": "e1d9d8fcc5bf6623b65edaa0eccf770e97d5a869bf4c3e6b354819ca425b0839"
+        },
+        {
+          "path": "inject/legacy_stdio.cpp",
+          "size": 121,
+          "sha256": "4646411abf2e107740f4617d0b37b985b4c2c0ed1ce27b8f75e2b6f8ca80fd8a"
+        },
+        {
+          "path": "inject/lib/lua/include/lauxlib.h",
+          "size": 5777,
+          "sha256": "c741f9c1587f29fd08a79acbe0c46884768a47f89bee4147669f774c5cf50fc0"
+        },
+        {
+          "path": "inject/lib/lua/include/lua.h",
+          "size": 11688,
+          "sha256": "c2a78484b53d115d9229a62e8d16db8309f1c68415b56ad5672e00674119bebb"
+        },
+        {
+          "path": "inject/lib/lua/include/lua.hpp",
+          "size": 191,
+          "sha256": "fd83f7e823cfbb03ac2da937ec83f01b4a6ddaac220a4fa1ffd6c6c3842c5890"
+        },
+        {
+          "path": "inject/lib/lua/include/luaconf.h",
+          "size": 22450,
+          "sha256": "686aad19e3ec1055799b96b29eb3518040cde821c22e1e9b5d756a0c60aaba32"
+        },
+        {
+          "path": "inject/lib/lua/include/lualib.h",
+          "size": 1026,
+          "sha256": "13f880e9dd997a0f7fd0b17ccd949c98f33e95bd120f084de66084e888217413"
+        },
+        {
+          "path": "inject/lib/lua/lua5.1.lib",
+          "size": 484530,
+          "sha256": "5175f54c643e0202e501120b0863f6f0ae52995021c3a37d0f7db5808d1c2ac7"
+        },
+        {
+          "path": "inject/main.cpp",
+          "size": 1817,
+          "sha256": "00fec842ca6ea275d1e3628df782cd76d60f016fe75cc734b9595780d98b80a1"
+        },
+        {
+          "path": "inject/player_side.h",
+          "size": 108,
+          "sha256": "55e520f0095335a84f14d0de77e8b391a70e79ecf6107a3f1d0d767d0e3fa297"
+        },
+        {
+          "path": "inject/sandbox.cpp",
+          "size": 6696,
+          "sha256": "3abbcaf309c3899e4ef4af5b864ac140c44d2c67d1d822984a8fea22e4e9222e"
+        },
+        {
+          "path": "inject/sandbox.h",
+          "size": 342,
+          "sha256": "19892aaea27944dcf8a322b4cf2c738150c5dd22497a89d6270116b41c7a5bff"
+        },
+        {
+          "path": "inject/th09address.cpp",
+          "size": 2296,
+          "sha256": "61cc22a7e8e20ff819d93e1a97683ec2437cfaba70c3de0bcce5e394fc604b6e"
+        },
+        {
+          "path": "inject/th09address.h",
+          "size": 3304,
+          "sha256": "dbc3e42a8a601704e044e28a320412139dc708e081350a4be1affe13d39da71b"
+        },
+        {
+          "path": "inject/th09types.h",
+          "size": 8040,
+          "sha256": "2751b9637f9f6421fbbb513220dd6ed13e1e504e0e9e257b2d08494e836b54da"
+        },
+        {
+          "path": "ka_ai_duka.sln",
+          "size": 2727,
+          "sha256": "0933954109160ff38ec5803f8429c58c55e7d7d822fb4591b25fc8a3cb529213"
+        },
+        {
+          "path": "ka_ai_duka/icon.ico",
+          "size": 32988,
+          "sha256": "3167debdf6f83a0f3ca13942335782336d894dd0ed3c64e484de5e1b83daf72f"
+        },
+        {
+          "path": "ka_ai_duka/icon.png",
+          "size": 1324,
+          "sha256": "83df2e4add06c3ae03c3c4c02c8094df4d73d2fb23c7282c317e8a72ff042c3a"
+        },
+        {
+          "path": "ka_ai_duka/inject.cpp",
+          "size": 1503,
+          "sha256": "6f0e4f332c55747530f2365c33e14ba552f7473214b1e3800641f81a29145f59"
+        },
+        {
+          "path": "ka_ai_duka/inject.h",
+          "size": 145,
+          "sha256": "5bb73e5d70ed99e1fec554f65a2672b498d13bd9631ad225035798700b0ac27b"
+        },
+        {
+          "path": "ka_ai_duka/ka_ai_duka.rc",
+          "size": 215,
+          "sha256": "73031397df3a0e028a13900736653d78d76fc0c98e3d75ba1658cd8182b4392b"
+        },
+        {
+          "path": "ka_ai_duka/ka_ai_duka.vcxproj",
+          "size": 4436,
+          "sha256": "b66eb3dc3a531ab08ae8e3805fad8ec078c2779d7b882e7a7b895dea39b4d92f"
+        },
+        {
+          "path": "ka_ai_duka/ka_ai_duka.vcxproj.filters",
+          "size": 1493,
+          "sha256": "b167da45987fe3a2664c4c1020105470202c25593189061bdbd1642beb71435e"
+        },
+        {
+          "path": "ka_ai_duka/main.cpp",
+          "size": 2021,
+          "sha256": "e53b02bc46da4dcf0774496b1bfe6bb6c26ee9b832dc74753123d195428a38a8"
+        },
+        {
+          "path": "ka_ai_duka/resource.h",
+          "size": 403,
+          "sha256": "4804188926e6b4eb774387f1c2d8ad5fa5e10e5c3a57e0e4f5028630bd3bebcb"
+        },
+        {
+          "path": "ka_ai_duka_w/icon-gaussian.png",
+          "size": 3428,
+          "sha256": "b48285740329083add6e46248773aed8ab864c96abeb8054d04a3822c06334e5"
+        },
+        {
+          "path": "ka_ai_duka_w/icon.png",
+          "size": 1324,
+          "sha256": "83df2e4add06c3ae03c3c4c02c8094df4d73d2fb23c7282c317e8a72ff042c3a"
+        },
+        {
+          "path": "ka_ai_duka_w/ka_ai_duka_w.rc",
+          "size": 3738,
+          "sha256": "57635e0e7aed9df686de40f8b5343ac23f827565f5c8464198dfb93d4db6e0d1"
+        },
+        {
+          "path": "ka_ai_duka_w/ka_ai_duka_w.vcxproj",
+          "size": 3941,
+          "sha256": "ef39371f76bb0d38f1639f5cb250babb28a4c29f7b31dce86521cc3b1ce337fd"
+        },
+        {
+          "path": "ka_ai_duka_w/ka_ai_duka_w.vcxproj.filters",
+          "size": 1288,
+          "sha256": "23872bc85e0eb00bb7eafa4ee720e8bb829cf116cea75097e7cfaa95c12378f4"
+        },
+        {
+          "path": "ka_ai_duka_w/main.cpp",
+          "size": 7671,
+          "sha256": "b5397fd3b1e5136f0f2f232734c586f5f0af75c86fd05fa03fdf5387ea2325fd"
+        },
+        {
+          "path": "ka_ai_duka_w/resource.h",
+          "size": 1088,
+          "sha256": "943bb47a701cf871b73e2feda118042d8c918fb563ce4fc793e8ae615cc2815a"
+        },
+        {
+          "path": "sample-scripts/passive-avoid/hitutils.lua",
+          "size": 816,
+          "sha256": "3c6d45882b7560d040706fc537f99976dd09e344c43cac30b11c26710fd4d369"
+        },
+        {
+          "path": "sample-scripts/passive-avoid/keyutils.lua",
+          "size": 676,
+          "sha256": "c4578d05ac29d8f6f21c9827bf905a3ecca3a7cc2f9fd84b167f289ff6320a4b"
+        },
+        {
+          "path": "sample-scripts/passive-avoid/main.lua",
+          "size": 4872,
+          "sha256": "fafebfa486cd48fbfdcc80793e5931cc54cd94f73a68ef98cfb73617ada9123c"
+        },
+        {
+          "path": "sample-scripts/passive-avoid/readme.txt",
+          "size": 1725,
+          "sha256": "e4b019ae11fce335383dc99f43213f177c2a255265bca7c74adea6d59450a77b"
+        },
+        {
+          "path": "sample-scripts/random-walk/keyutils.lua",
+          "size": 676,
+          "sha256": "c4578d05ac29d8f6f21c9827bf905a3ecca3a7cc2f9fd84b167f289ff6320a4b"
+        },
+        {
+          "path": "sample-scripts/random-walk/main.lua",
+          "size": 1652,
+          "sha256": "6add04529dec1e55c756f27e6a9d9cbeb1196198532cbfe4140c2d70982e040c"
+        },
+        {
+          "path": "sample-scripts/random-walk/readme.txt",
+          "size": 384,
+          "sha256": "77b6483520a15856bf9c3424a0cfc7b1a991568392eefc6e53771b54330b41a1"
+        },
+        {
+          "path": "sample-scripts/shoot-nearest/hitutils.lua",
+          "size": 816,
+          "sha256": "3c6d45882b7560d040706fc537f99976dd09e344c43cac30b11c26710fd4d369"
+        },
+        {
+          "path": "sample-scripts/shoot-nearest/keyutils.lua",
+          "size": 676,
+          "sha256": "c4578d05ac29d8f6f21c9827bf905a3ecca3a7cc2f9fd84b167f289ff6320a4b"
+        },
+        {
+          "path": "sample-scripts/shoot-nearest/main.lua",
+          "size": 6284,
+          "sha256": "5c529c517ff9b76a2e7acc5f0d20b72ed0f2717f126f7881eeae3ca1c3c8c8f6"
+        },
+        {
+          "path": "sample-scripts/shoot-nearest/readme.txt",
+          "size": 1058,
+          "sha256": "fe9d37baee7ec6ed53cc2056cfa917fd44071753426d607ad6ebccd281b1e4df"
+        },
+        {
+          "path": "static-files/LICENSE.txt",
+          "size": 2133,
+          "sha256": "0f9838036a9ac5dda8075065996784e0d0ebd9807a386e9dff2a28558c7d10cc"
+        },
+        {
+          "path": "static-files/doc/doc.html",
+          "size": 31485,
+          "sha256": "a3a1fbba0ecffeb7d2a3490f0fc18f6b253d6d7485f4af41295f54f29f88ff9d"
+        },
+        {
+          "path": "static-files/doc/res/axis.png",
+          "size": 4386,
+          "sha256": "a45f5d7ed9b8050c210bdc2278cade298b1701b300e69678933c81b180488b42"
+        },
+        {
+          "path": "static-files/doc/res/doc.css",
+          "size": 590,
+          "sha256": "230c10af63f169796c9e3ca13ecb9c1a44779bed553fc639fe376017eb4e1b37"
+        },
+        {
+          "path": "static-files/doc/res/hittypes.png",
+          "size": 12358,
+          "sha256": "f40af2ff17a827ebaf209fdaac3a1cd3b08908f9409f9a4bc3615f57c8a3561b"
+        },
+        {
+          "path": "static-files/gen-doc/conv.sh",
+          "size": 92,
+          "sha256": "b835fe4b33faed5660c2fbd8ec368587c7d0a1b56ab2688af1db94d91ba56c01"
+        },
+        {
+          "path": "static-files/gen-doc/doc.md",
+          "size": 20916,
+          "sha256": "31dc2f7f256bf78ad68a15001dd0e2095ee3d970fccf23204bd8d19d1d6c9f25"
+        },
+        {
+          "path": "static-files/ka_ai_duka.ini",
+          "size": 339,
+          "sha256": "83eaabfa85c6c9990db545e32aac9969293eb6698c3932967f523ae9c6a617ba"
+        },
+        {
+          "path": "static-files/readme.txt",
+          "size": 4324,
+          "sha256": "1de5c68c5d20969ebef18373b7f8edb5e4043f68f6d132d641a3a9e7dcca49a0"
+        },
+        {
+          "path": "test/errormsg-test.lua",
+          "size": 159,
+          "sha256": "35aa1678c0dae5a32a2710f6186fd2e9c86651fafe43f5136c881e64925ad963"
+        },
+        {
+          "path": "test/issue10.lua",
+          "size": 195,
+          "sha256": "098d4eb36345572c9ac5435a63fe3b7770f04227027e9b7a24be2276fdd9b544"
+        },
+        {
+          "path": "test/issue14.lua",
+          "size": 215,
+          "sha256": "80af416c467ab5bdcd7b39f58e3bbcbb0c2e9a1c21f5a0fdc4a1eccc4a5f3ccc"
+        },
+        {
+          "path": "test/issue14/.gitignore",
+          "size": 7,
+          "sha256": "2be670a6c1e778f2d0af6e347d0dca9492c775a72b6d7c39629cf66ec5fbdbea"
+        },
+        {
+          "path": "test/issue14/main.lua",
+          "size": 240,
+          "sha256": "bafbb476da01a1ac1fc5f0ac6a5f0516fe6c7cb809cbc9e8f040ef0aa147fc12"
+        },
+        {
+          "path": "test/issue14/view.html",
+          "size": 1018,
+          "sha256": "4c9b3ea0b2b5d73eb0432fc92946f3439ee5a424fcfd68bfc87b9a484da5e9c8"
+        },
+        {
+          "path": "test/issue4.lua",
+          "size": 1030,
+          "sha256": "edfeaf32caa030dd729e304adbc22a442fa2d85ced80239592e5999ccf6dff69"
+        },
+        {
+          "path": "test/issue6.lua",
+          "size": 576,
+          "sha256": "1321930a41c9ce0b4de778ac003b3d0991f65ae59fc482bf6b3a643bf5b58f5e"
+        },
+        {
+          "path": "test/issue7/main.lua",
+          "size": 404,
+          "sha256": "2fa4b70ae4a1ebc12595bb434be341c15b43632d103c1f726e512e1b28ee3b01"
+        },
+        {
+          "path": "test/issue7/test.lua",
+          "size": 214,
+          "sha256": "c97d9081b8518132384855192979f6bb4bf3d712186bd5bf3fc896abace45cb5"
+        },
+        {
+          "path": "test/issue9.lua",
+          "size": 463,
+          "sha256": "3916ac95afa586dd5a3daeb7625ede8d657309b17e986d39188d131e3ef06d47"
+        },
+        {
+          "path": "test/library-test.lua",
+          "size": 1302,
+          "sha256": "6b2634fc8ae01ce6f32b457bb7137dca2754a32e0cdf97c75541c8842295ccd5"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+* text=auto
+*.lua text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bz2 binary
+# Original upstream readmes use CP932; preserve their bytes.
+licenses/ka_ai_duka/readme.txt -text

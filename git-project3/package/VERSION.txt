@@ -1,0 +1,5 @@
+DS-TH09-AI 3.3.0-test
+
+Player-configurable movement changes, circular vision and attention.
+Default vision: radius 448/3 game units, shared by dodge and C target/resource decisions.
+CSV: 162 columns. Historical preset names remain compatible; no survival-time guarantee.

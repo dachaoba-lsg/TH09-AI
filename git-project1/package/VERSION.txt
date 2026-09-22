@@ -1,0 +1,25 @@
+TH09-AI 0.1.9
+
+Author: 圣诞老人的驯鹿-xunlu
+Release: first Medicine-poison test package; read-only effective-speed/protection/recharge sensing and corresponding route prediction
+Upgrade: use the full 0.1.9 package; replacing dodge.lua alone is insufficient; retain the 0.1.8 ZIP separately
+
+Runtime: ka_ai_duka 1.7 (unmodified upstream binaries)
+Native launcher: checked in-memory input isolation
+Native support: window recreation recovery and edge/corner resizing; optional 1P practice protection
+Laser sensor: checked in-memory upstream export hook corrects raw.length1 origin offset; game laser physics/HP and original disk DLL unchanged
+Poison/state sensing: nonlethal slowing terrain and protection-expiry awareness; no 2P HP or protection modification
+State contract: apiVersion 1 valid snapshot required; invalid/missing snapshots release all AI input and report an error
+Protection: diagnostic remaining value is raw; avoidance uses max(floor(raw)-1,0); unknown states grant no assumed protection
+Supported game: Japanese TH09 v1.50a
+AI side: 2P
+Charge compatibility: 2P Option Charge Type must be Slow; explicit Charge mode releases AI input and prompts correction; 1P setting untouched
+Launcher paths: resolve nearest ancestor containing th09.exe; regenerate paths after relocation
+Battle limit: launcher-settings.json top-level seconds, default 600; integer 0-86400, 0 unlimited
+Timing: AI battle callbacks / 60; pause-menu scheduling not separately verified; stop remains latched until next battle
+Practice: 1P no-damage preserves exact HP; invincible takes precedence; both default false
+Unchanged: random C1-C4, insufficient-energy tap shots, 500000-point Z lock, no X, timing/input isolation/practice/window rules
+Known limitations: first poison test build; no adaptive proactive C, high-level energy planning or dedicated time-stop strategy; no guaranteed survival
+Completed checks: native sensor/selftests, real x86 bridges, input isolation, practice patches, suspended startup, launcher/path regression and JSON-to-Lua callback-limit integration
+Acceptance: suspended tests created no game window or input; no new 0.1.9 real-battle acceptance; player Medicine testing required
+Feedback: video plus ai/ai_debug.csv and runtime/native-window.log; existing game installations not automatically replaced by packaging

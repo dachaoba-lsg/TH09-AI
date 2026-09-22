@@ -1,0 +1,14 @@
+{
+  "seconds": 600,
+  "practice": {
+    "player1_no_damage": false,
+    "player1_invincible": false
+  },
+  "window": {
+    "enabled": true,
+    "width": 960,
+    "height": 720,
+    "resizable": true,
+    "keep_aspect": true
+  }
+}

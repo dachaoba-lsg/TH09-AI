@@ -1,0 +1,118 @@
+TH09-AI 0.1.8 — 第三方声明 / Third-party notices
+核对日期：2026-09-20
+
+一、本项目与许可范围
+
+作者：圣诞老人的驯鹿-xunlu
+包根目录 LICENSE.txt 的 MIT 许可只覆盖本项目新增的 AI、启动器、原生
+辅助模块源码、构建脚本和原创文档，不覆盖下列第三方组件或原游戏。
+source/ 包含本项目可修改的源码与构建/重链接说明。整个运行包并非
+单一 MIT 许可作品；再分发时请保留本文件、各组件许可和随包源码材料。
+
+二、ka_ai_duka（花AI塚）v1.7
+
+作者：いで（@ide_an），GitHub 用户 ide-an
+项目：https://github.com/ide-an/ka_ai_duka
+发行版：https://github.com/ide-an/ka_ai_duka/releases/tag/ver1.7
+对应源码：https://github.com/ide-an/ka_ai_duka/tree/ver1.7
+原 README：https://github.com/ide-an/ka_ai_duka/blob/ver1.7/static-files/readme.txt
+
+runtime/inject.dll 和 runtime/ka_ai_duka.exe 来自原作者 v1.7 发行版，
+磁盘文件未修改。当前使用本项目的 th09ai-launcher.exe 启动和注入，
+仅在进程内对核验过的指令进行 2P 输入隔离等修补；旧 ka_ai_duka.exe
+作为上游运行包组件保留，不作为当前用户入口。
+
+0.1.8新增的laser_sensor.c/.h由本项目编写：在暂停启动阶段核验已加载
+上游DLL的原函数及vtable后，仅在进程内修正其Laser::Update导给AI的
+hitBody起点偏移。它不改磁盘上的上游DLL、游戏激光物理或HP，也不把
+上游代码重新许可为MIT。本项目新增感知模块的许可不扩大或替代原作、
+ka_ai_duka及其他第三方组件的许可范围。
+
+原作者 README 的 FAQ 明确允许再分发，并要求同时附上 LICENSE.txt。
+原发行版的 LICENSE.txt 与 CP932 编码 readme.txt 原样位于 ka_ai_duka/。
+LICENSE.txt 主要是 Lua 的许可声明；不能据此把 ka_ai_duka 整个项目
+或其全部第三方代码一概宣布为 MIT。我们没有替原作者授予新的许可。
+如需修改、拆分或采用超出原 README 已说明范围的上游代码，须另行
+核实相应权利；“源码公开可看”不等于所有用途都已获授权。
+
+原版上游二进制还包含其编译环境的 C/C++ 运行库代码。本项目保留
+原发行二进制，不单独分发 Windows 系统 DLL，也不以本项目 MIT
+重新授权其中的第三方内容。本说明不构成对全部第三方权利链的独立保证。
+
+三、Lua 5.1.4（随 inject.dll 静态链接）
+
+Copyright (C) 1994-2008 Lua.org, PUC-Rio. All rights reserved.
+许可：MIT，见 lua-5.1.4.txt（按对应 lua.h 保留的声明）。
+上游 v1.7 发行版 LICENSE.txt 另含其原附 Lua 许可，亦原样保留。
+项目：https://www.lua.org/
+许可说明：https://www.lua.org/license.html
+v1.7 使用标准 Lua；本包不额外分发 LuaJIT 或 luabind。
+
+四、Boost 1.58（上游运行库使用的头文件组件）
+
+上游 inject 工程引用 Boost 1.58.0.0，包含 shared_ptr 等组件。
+相关 shared_ptr 版权包括 Greg Colvin、Beman Dawes（1998、1999），
+Peter Dimov（2001-2008）；各文件完整版权以对应上游源码为准。
+许可：Boost Software License 1.0，见 boost-LICENSE_1_0.txt。
+该许可对纯机器可执行目标码设有随附声明例外；这里仍保留文本与致谢。
+项目：https://www.boost.org/
+许可：https://www.boost.org/LICENSE_1_0.txt
+对应头文件：https://github.com/boostorg/smart_ptr/blob/boost-1.58.0/include/boost/smart_ptr/shared_ptr.hpp
+
+五、THprac（技术参考，不分发其完整程序）
+
+Copyright (c) 2022 Ack
+致谢：Ack 与 THprac contributors
+项目：https://github.com/touhouworldcup/thprac
+参考文件：https://github.com/touhouworldcup/thprac/blob/master/thprac/src/thprac/thprac_th09.cpp
+许可：https://github.com/touhouworldcup/thprac/blob/master/LICENCE
+本项目参考其 TH09 练习功能的地址/行为等技术信息，另行实现辅助模块，
+并加入本项目自己的连击清零等处理。保留对应 MIT 文本于 thprac-MIT.txt。
+不包含 thprac 可执行程序，也不暗示原作者参与、推荐或担保本项目。
+
+六、TinyCC 0.9.27（实际链接的启动/运行库代码）
+
+项目：https://bellard.org/tcc/
+源码：https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2
+源码目录：https://github.com/TinyCC/tinycc/tree/release_0_9_27
+
+本项目的 x86 th09ai-launcher.exe 与 window_support.dll 使用 TinyCC
+win32 0.9.27 构建。它不只是一个未随包分发的编译器：EXE/DLL 实际
+静态链接了其 win32/lib/crt1.c、dllcrt1.c、chkstk.S 对应启动对象。
+这些文件适用 TinyCC COPYING 中的 GNU Lesser General Public License
+2.1 条款；COPYING 全文位于 tinycc/COPYING。
+
+tinycc/tcc-0.9.27.tar.bz2 是完整、未修改的对应上游源码，含构建脚本、
+版权声明和各文件许可。SHA-256：
+DE23AF78FCA90CE32DFF2DD45B3432B2334740BB9BB7B05BF60FDBFC396CEB9C
+
+本包同时提供我们的完整相关源码和重链接材料，见 ../source/BUILD.md。
+你可以修改上述运行库、重建并将我们的模块与修改后的运行库重新链接。
+我们不对为调试此类修改进行的逆向工程施加额外限制，也不限制接收者
+行使适用 LGPL 权利。修改和再分发库代码时须继续遵守其相应许可。
+
+TinyCC lib/libtcc1.c 自身另有 GPL 条款及明确链接例外，该文件的例外
+不能直接泛化为所有启动文件的例外；具体以压缩包各文件头和 COPYING
+为准。归档内包含此类 GPL 源文件；其源码分发仍须遵守 GPL 条款，
+GPL 第 2 版全文另附 tinycc/GPL-2.0.txt，来自
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt 。
+完整源码归原权利人所有，不由本项目 MIT 许可重新授权。
+本包没有附带 TinyCC 编译器二进制，也没有复制 Windows 系统 DLL。
+
+七、其他参考与未包含内容
+
+Infinideastudio/TH10AI 及用户提供的参考视频用于思路与效果参考：
+https://github.com/Infinideastudio/TH10AI
+https://www.bilibili.com/video/BV1PpNn62Ekv
+本包未复制该仓库代码、视频或 thtk 解包工具/游戏解包产物。参考致谢
+不代表获得其再分发许可，也不代表参考作者认可本项目。
+
+《东方花映塚》/ Touhou Project 的游戏程序、数据、图片、音乐等权利
+属于上海アリス幻樂団 / ZUN 及相应权利人。此为非官方本地 AI 工具。
+发行包不含原游戏、游戏源码、解包素材、个人成绩/存档、录像或采集数据。
+用户应自行准备合法游戏。本项目 MIT 不授予原作或其他第三方素材权利。
+官方二次创作指引：https://touhou-project.news/guideline/
+官方视频发布指引：https://touhou-project.news/guideline_videoposting/
+
+本说明是按公开条款与实际包内容进行的技术整理，不是正式法律意见。
+若要商业发行、变更第三方组件或另行打包原作素材，请先重新核实授权。

@@ -1,0 +1,55 @@
+TH09-AI 2.0.6
+
+Author: 圣诞老人的驯鹿-xunlu
+Release: all-character capture/C2-cycle bloom test package; Lua/native regressions passed; package/rebuild records accompany delivery; user live acceptance pending
+Strategy: spatial fairy/spirit/erasable-bullet chains; deliberate C1/C2 only; resource-qualified C2 and C1 coverage/yield comparison
+Removed: random C1-C4 selection and the 500000 Spell Point firing lock
+Movement: Y >= 150 policy limit (roughly below top third), physical y=16..432 unchanged; no ordinary-shot/C1 upward chase; limited spirit capture; original dodge geometry retained
+C2 position: actual release observation separate from at most 9 lower/side candidates; reachable ignition seed required; direct/contested clears penalized
+Position search: full nine-candidate search every 6 observe calls by default; cache coordinates only; actual/cached-position yields reevaluated each callback; invalid/no-seed cache triggers search; dodge and actual resource evaluation not throttled
+Early C2 ratio: net chain bullets / (net + direct + contested) >= 0.35 by default; otherwise prefer ordinary shots, C1 or waiting
+Capture: independent chain/white-bullet valuation; bounded fast lateral approach before selective Shift; retained-chain lock permits later capture
+C1 coverage: readonly selector-1 templates and current owned-shot AABBs; current hits require damageReady; partial/custom callbacks explicitly limited; existing action remainder cannot fund a fresh C1
+Post-C2 Z: charge-reset/live-effect association before follow-up; separate request count, not an extra confirmed C1; input and charge gates remain distinct
+Protected capture: fast interval normally 72; confirmed C2 with enough live protection may use 24; actual Shift budget 40/180 and per-window max 32 retained
+Protected route: real state3 only; original short path plus held-endpoint check to expiry+4, bounded at 60 at normal timeScale; no circle-based collision exemption
+Shape timing: selective early spirit capture preserves high-speed fairy supply and the retained chain; ignite before white bullets leak through
+Bounded hold: C2 charge 200..299 and C1 100..199 may wait only for a clearly better future net chain; waiting <=24 updates, whole preparation <=90 updates, not a fixed 0.4s delay
+Charge safety: release C2 if charged + chargeSpeed >= 300 regardless of current Max; end C1 waiting before 200
+Deadline priority: independent C2 cadence overrides ratio/position/shape waiting; C1 never resets it; no waiting into C3
+Scarce resources: may wait before cadence preparation even at risk of a hit; deadline can bypass resource gates; no danger-triggered emergency C2 or X
+C2 cadence: normal 480 game Timer units; rich chains may shorten the next C2 target to 260 or 200 units; reset only by C2 release request; C1 does not postpone C2
+Any-C cadence: reset by any C release request; energy below 200 but at least 100 schedules C1 at its 480-unit deadline
+Cadence lead: initial held-Z warm-up (up to 11) plus remaining charge / speed plus 2 units; begin before expiry
+Cadence exceptions: action gates, hits and insufficient energy may delay release; overdue debt retained; cut-ins/time stops freeze cadence clocks
+C2 ignition: can directly destroy fairies and unactivated spirits; independent of ordinary-shot eligibility/alignment
+C2 direct clear: white bullets swallowed by its circle provide neither recharge nor return bullets
+C2 yield: count potential fairy/spirit explosion conversions; contested-envelope bullets are conservatively unbudgeted, not physically incapable of conversion
+C2 common circle: statically verified fixed release point, initial radius 0, growth 4 per update, lifetime 48
+C2 planning: 188 ignition reach and 192 contested envelope; no exact circle/blast race simulation; conservative yield can underestimate reality
+Recharge: a refill to 2/3 is an observed outcome, not an ignition/energy gate; heuristic geometry/race estimates and feedback cannot guarantee another C2
+Correction: 2.0.0 reused ordinary-shot ignition and overcounted nearby erasable-bullet yield
+Post-C2 route: confirmed C2 protection prefers a low landing band; after expiry, observed lower-field pressure may move the target back to mid field; real dodge geometry remains authoritative
+Diagnostics: CSV retains the prior 104 columns and adds post_c2_phase, post_c2_age, post_c2_target_y, cadence_limit and bloom_cadence (109 columns)
+Upgrade: use the full 2.0.6 package, including bloom.lua and bloom_observer.lua; retain the 2.0.5 and older ZIPs separately
+
+Runtime: ka_ai_duka 1.7 (unmodified upstream binaries)
+Native compatibility: existing native version markers and player.sensor apiVersion 1 retained; followupApiVersion 1 readonly extension added
+Native launcher: checked in-memory input isolation
+Native support: window recreation recovery and edge/corner resizing; optional 1P practice protection
+Laser sensor: checked upstream export correction; original game physics and disk DLL unchanged
+Poison/state sensing: retained nonlethal slowing terrain and protection-expiry awareness; no 2P HP or protection modification
+State contract: apiVersion 1 valid snapshot required; invalid/missing snapshots release all AI input and report an error
+Supported game: Japanese TH09 v1.50a
+AI side: 2P
+Charge compatibility: 2P Option Charge Type must be Slow; 1P setting untouched
+Launcher paths: resolve nearest ancestor containing th09.exe; regenerate paths after relocation
+Battle limit: launcher-settings.json top-level seconds, default 600; integer 0-86400, 0 unlimited
+Timing: AI battle callbacks / 60; pause-menu scheduling not separately verified; stop remains latched until next battle
+Practice: 1P no-damage preserves exact HP; invincible takes precedence; both default false
+Unchanged: no X, timing/input isolation/practice/window rules; no game spawn, energy, poison or physics edits
+Diagnostics: 104 CSV columns; prior 88 plus 16 capture/C1/common-wave/input/follow-up/endpoint fields; requests and estimated yield are not confirmed kills/returns
+Known limitations: custom C1 callbacks and future active-shot motion may be unmodeled; heuristic chains, circle/blast races, recharge and bounded endpoint predictions; no guaranteed survival
+Baseline feedback: user confirmed 0.1.9 poison tests and accepted 2.0.2; neither is all-character 2.0.5 acceptance
+Acceptance: final 2.0.5 regression, package, source-rebuild and hash results belong to this delivery final record; user live acceptance pending; microbenchmarks do not guarantee FPS
+Feedback: video plus ai/ai_debug.csv and runtime/native-window.log; packaging does not replace installed games

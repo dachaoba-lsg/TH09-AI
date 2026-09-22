@@ -1,0 +1,29 @@
+{
+  "seconds": 600,
+  "practice": {
+    "player1_no_damage": false,
+    "player1_invincible": false
+  },
+  "window": {
+    "enabled": true,
+    "width": 960,
+    "height": 720,
+    "resizable": true,
+    "keep_aspect": true
+  },
+  "ai": {
+    "difficulty": "human200",
+    "move_change_budget": 6,
+    "vision_radius": 149.333333333333,
+    "plan_interval": 6,
+    "reflex_radius": 10,
+    "sight_radius": 20,
+    "blind_urgent_limit": 3,
+    "overload_frames": 6,
+    "overload_action": "c_then_panic",
+    "speed_reference": 1.5,
+    "speed_exponent": 1,
+    "width_reference": 128,
+    "debug_log": false
+  }
+}

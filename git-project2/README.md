@@ -1,0 +1,58 @@
+# TH09-AI 2.0.6
+
+简明功能与逻辑见 [版本说明](版本功能与逻辑说明.md)。
+
+《东方花映塚》日文版 v1.50a 的本地 2P AI 源码。Lua 负责决策，本项目的原生启动器和支持模块提供输入隔离、窗口处理及只读感知，运行时使用上游 ka_ai_duka v1.7。
+
+这是第二代开花测试版本，以 C1/C2、短时固灵、连爆资源和 C2 循环经营为核心，保留毒与激光避弹。需要自行准备游戏；仓库不包含游戏本体。
+
+## 三个源码版本
+
+| 源码目录 | 版本 | 主要用途 |
+| --- | --- | --- |
+| git-project1 | 0.1.9 | 第一代避弹、随机 C、毒与激光感知 |
+| git-project2 | 2.0.6 | 以 C1/C2、固灵和连爆资源经营为核心的开花测试 |
+| git-project3 | 3.3.0-test | 开花策略基础上的圆形视野、注意力和变向限制 |
+
+三者是独立源码快照，配置和发行文件应与各自版本配套。本文说明第二代的现行行为。
+
+## 行为与边界
+
+- 在 Match Mode → Human vs Human 中控制 2P。2P 的 `Charge Type` 必须为 `Slow`；AI 不使用 X。
+- 根据妖精、灵和白弹连爆资源选择普通射击、C1/C2；不再随机选择 C，也没有第一代的 500000 分停枪规则。
+- 使用短时低速固灵和有界接近。策略活动高度为 Y ≥ 150，真实场地与角色物理边界不变。
+- C2 具有独立节奏，资源充足时可缩短循环；C1 不推迟 C2 的期限。能量不足、动作门或受击仍可能延后释放。
+- 区分 C2 直接吞弹与连爆可能产生的回能；请求释放、几何覆盖、预计连爆和真实回能不是同一件事。
+- `launcher-settings.json` 顶层 `seconds` 默认 600；0 表示关闭接管时限。时限不等于存活保证。
+
+部分角色的 C1 自定义回调、未来攻击运动及消弹圈与爆风竞速仍使用有限模型。现有保护来自读取到的真实状态，不能把计划中的下一次 C2 当作无敌。此版本没有第三代的四项玩家能力参数，也不承诺纯开花或固定存活时间。
+
+原生感知修正作用于 AI 读取的数据，不修改游戏的子弹生成、碰撞物理、2P HP 或能量。离线测试不能代替实战验证。
+
+## 从源码构建
+
+在仓库根目录运行，示例编译器路径请替换为自己的完整 TinyCC 0.9.27 win32 工具目录：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 -CompilerPath 'C:\tools\tcc\tcc.exe'
+```
+
+入口准备固定版本且校验哈希的上游依赖，构建本项目原生模块，执行原生自测并验收发行包。输出为 `dist/TH09-AI-v2.0.6.zip`，不会自动安装或启动游戏。完整依赖、离线构建和测试方法见 [BUILDING.md](BUILDING.md)。
+
+玩家使用方法见 [package/README.md](package/README.md)。完整发行包可放在 GitHub Releases；`dist/`、`vendor/`、`downloads/`、`work/` 是本地生成目录，不作为源码提交。
+
+## 目录与许可
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/ai/` | Lua 决策、开花观察器与配置 |
+| `src/native/` | 原生启动器、窗口与感知支持 |
+| `src/launcher/` | 启动脚本 |
+| `package/` | 玩家文档和默认配置模板 |
+| `tests/` | 离线回归及可选集成测试 |
+| `scripts/` | 固定依赖准备脚本 |
+| `licenses/` | 第三方许可、TinyCC 对应源码与说明 |
+
+原创部分的许可见 [LICENSE.txt](LICENSE.txt)，第三方组件各自遵守 [licenses/THIRD_PARTY_NOTICES.txt](licenses/THIRD_PARTY_NOTICES.txt) 及相应许可。项目 MIT 不替代上游组件的许可。上游 `inject.dll` 和 `ka_ai_duka.exe` 来自未修改的发行文件，本项目构建命令不重新编译这两个上游文件。
+
+贡献和问题报告见 [CONTRIBUTING.md](CONTRIBUTING.md)。开发历史保存在 [docs/DEVELOPMENT-HISTORY.md](docs/DEVELOPMENT-HISTORY.md)，其中旧版说明不覆盖本页和当前代码。
