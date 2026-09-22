@@ -46,6 +46,14 @@ local function setting(cfg, key)
 end
 local function number(v, fallback) return finite(v) and v or (fallback or 0) end
 
+-- Reimu's non-piercing C1 amulets need an observed damage/HP budget. A
+-- rectangle contact (or an unsupported homing template) is not a kill seed.
+-- Keep the existing coverage policy for characters not audited by this model.
+local function c1Ignition(player, source)
+  if type(source) ~= 'table' or not source.valid or not source.has_ignition then return false end
+  return player.character ~= 0 or (source.damage_model_valid == true and number(source.kill_count) > 0)
+end
+
 local function clearPreparation(state)
   state.prepare_ids, state.prepare_age, state.prepare_focus_frames = nil, nil, nil
   state.prepare_activated, state.prepare_capturing = nil, nil
@@ -67,17 +75,20 @@ end
 
 local function urgent(source)
   local t = timing(source)
-  return t and t.urgency == true
+  -- Impact-timed resources already include warm-up, charge and flight. Their
+  -- leaving count compares two possible impact scenes, not a deadline now.
+  return t and t.at_impact ~= true and t.urgency == true
 end
 
 local function improves(source)
   local t = timing(source)
-  return t and t.improving == true and not t.urgency
+  return t and t.improving == true and (t.at_impact == true or not t.urgency)
 end
 
 -- This is a scheduling estimate, not an exact shot/blast travel model.
 local function missesWindow(source, level, player, sensor)
   local t = timing(source)
+  if t and t.at_impact == true then return false end
   if not t or not t.urgency or not finite(t.earliest_exit_frames) then return false end
   local lead = max(0, level * 100 - number(player.currentCharge)) / max(0.01, number(player.chargeSpeed))
     + max(0, number(sensor.chargeWarmupFrames, 11))
@@ -139,7 +150,7 @@ local function focusIntent(state, player, obs, cfg)
   local x, y = number(player.x), number(player.y)
   local capture = type(obs.capture) == 'table' and obs.capture or {}
   local c1 = type(obs.c1) == 'table' and obs.c1 or {}
-  local c1_available = c1.valid and c1.has_ignition and
+  local c1_available = c1Ignition(player, c1) and
     ((c1.remaining_only and number(c1.chain_bullets) > 0) or
       (not c1.remaining_only and number(player.currentChargeMax) >= 100
         and (player.sensor or {}).canCharge ~= false
@@ -457,6 +468,7 @@ end
 local function matureCharge(state, intent, p, obs, cfg, level)
   local source = level == 2 and obs.c2 or (state.c1_profile_charge and obs.c1 or obs)
   if level == 1 and source and source.remaining_only then source = nil end
+  if level == 1 and p.character == 0 and state.c1_profile_charge and not c1Ignition(p, source) then source = nil end
   state.armed_age = (state.armed_age or 0) + 1
   -- Do not trust the current energy cap: a chain can raise it during the next
   -- game update. Budget a full update even when timeScale currently is lower.
@@ -542,6 +554,17 @@ function M.update(game_side, state, cfg, obs)
       -- A pending C1 cannot indefinitely postpone the independent C2 clock.
       if not state.cadence_charge or deadline_level == 2 then state.target_level = deadline_level end
       state.cadence_charge, state.attack_ids = true, nil
+    end
+    -- Before the first charge threshold, a lost Reimu kill seed can still be
+    -- cancelled without releasing a C1. Reobserve capture on the next update;
+    -- neither this cancellation nor a C1 may postpone a due C2 deadline.
+    if p.character == 0 and state.target_level == 1 and state.c1_profile_charge
+        and not state.cadence_charge and charged < 100
+        and (not c1Ignition(p, obs.c1) or obs.c1.remaining_only) then
+      state.target_level, state.fresh_charge, state.attack_ids = nil, nil, nil
+      state.c1_profile_charge, state.armed_age = nil, nil
+      clearPreparation(state)
+      return result(state, intent, false, 'grow', 'reimu_c1_seed_lost')
     end
     if sensor.canCharge ~= false and state.fresh_charge and charged >= 200 then
       state.target_level = 2
@@ -654,14 +677,14 @@ function M.update(game_side, state, cfg, obs)
   end
 
   local c1 = type(obs.c1) == 'table' and obs.c1 or {}
-  local c1_ready = obs.valid and c1.valid and c1.has_ignition and not c1.remaining_only and energy >= 100
+  local c1_ready = obs.valid and c1Ignition(p, c1) and not c1.remaining_only and energy >= 100
     and number(c1.chain_enemies) >= setting(cfg, 'c1_enemies')
     and number(c1.chain_score) >= setting(cfg, 'c1_score')
     and not missesWindow(c1, 1, p, sensor)
   -- C2's release starts a role attack already. This is the user's follow-up
   -- Z edge, NOT a second confirmed C1 attack or a fresh 100-charge release.
   -- The separate input gate permits it while the C1 action blocks charging.
-  local followup_useful = (c1.valid and c1.has_ignition and number(c1.chain_bullets) > 0)
+  local followup_useful = (c1Ignition(p, c1) and number(c1.chain_bullets) > 0)
     or (obs.has_ignition and obs.ignition_aligned and number(obs.chain_score) >= setting(cfg, 'shot_score'))
   if state.followup and not state.followup.requested and sensor.canPressZ == true
       and charged < 100 and not intent.focus and not state.prepare_capturing
@@ -746,7 +769,8 @@ function M.update(game_side, state, cfg, obs)
     end
     return result(state, intent, false, state.focus and 'focus' or 'grow', 'wait_for_overlap')
   end
-  local legacy_c1 = (not c1.valid or c1.model_limited == true) and energy >= 100 and enemies >= setting(cfg, 'c1_enemies')
+  local legacy_c1 = p.character ~= 0 and (not c1.valid or c1.model_limited == true)
+    and energy >= 100 and enemies >= setting(cfg, 'c1_enemies')
     and score >= setting(cfg, 'c1_score')
   if legacy_c1 and not missesWindow(obs, 1, p, sensor) then
     return beginCharge(state, intent, charged, 1, obs, false, prepared_ids)

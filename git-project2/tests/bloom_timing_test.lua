@@ -15,7 +15,9 @@ local function config(overrides)
   return out
 end
 local function world(character)
-  return {player={character=character or 0,x=0,y=320,life=10,spellPoint=0,combo=0,
+  -- Generic timing fixtures omit damage proof; Reimu-specific proof and
+  -- activation timing are exercised in reimu_c1_policy_test.lua.
+  return {player={character=character or 1,x=0,y=320,life=10,spellPoint=0,combo=0,
     currentCharge=0,currentChargeMax=400,chargeSpeed=10,
     sensor={apiVersion=1,valid=true,state=0,canCharge=true,cutIn=false,timeScale=1,
       chargeWarmupFrames=0,chargeBlockFrames=0,protectionFrames=0}}}

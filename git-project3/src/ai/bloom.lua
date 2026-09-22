@@ -21,6 +21,7 @@ M.defaults = {
   position_weight = 0.002, focus_mismatch_cost = 8,
   min_y = 150, idle_y = 320, c2_position_lead_frames = 90,
   prepare_max_frames = 90, armed_max_frames = 24,
+  c1_revalidate_max_frames = 8,
   bloom_enter_bullets = 160, bloom_exit_bullets = 110,
   bloom_c2_interval_frames = 260, bloom_energy_floor = 100,
   bloom_exit_cycles = 2, bloom_min_net_fraction = 0.15,
@@ -120,6 +121,29 @@ local function chainIds(source)
   local seed = source.seed_id or source.ignition_id
   if next(ids) == nil and seed ~= nil then ids[seed] = true end
   return ids
+end
+
+local function ignitionIds(source)
+  local ids = {}
+  for _, id in ipairs(source.seed_ids or {}) do ids[id] = true end
+  local seed = source.seed_id or source.ignition_id
+  if seed ~= nil then ids[seed] = true end
+  -- Minimal/legacy observer fixtures have only a chain identity. Live C1
+  -- geometry always supplies seed_ids; ordinary-shot fallback has ignition_id.
+  if next(ids) == nil and source.seed_ids == nil then return chainIds(source) end
+  return ids
+end
+
+local function c1StillUseful(state, obs, cfg)
+  local source = state.c1_profile_charge and obs.c1 or obs
+  if not obs.valid or not source or not source.has_ignition or source.remaining_only
+      or number(source.chain_enemies) < setting(cfg, 'c1_enemies')
+      or number(source.chain_score) < setting(cfg, 'c1_score') then return false end
+  if state.c1_seed_ids then
+    for id in pairs(ignitionIds(source)) do if state.c1_seed_ids[id] then return true end end
+    return false
+  end
+  return true
 end
 
 local function timing(source)
@@ -534,6 +558,9 @@ local function beginCharge(state, intent, charged, level, source, cadence, origi
   local prepared_ids = original_ids or state.prepare_ids
   state.target_level, state.fresh_charge = level, charged < 100
   state.c1_profile_charge = level == 1 and c1_profile == true
+  state.c1_resource_charge = level == 1 and not cadence
+  state.c1_seed_ids = state.c1_resource_charge and ignitionIds(source) or nil
+  state.c1_lost_age = nil
   state.cadence_charge = cadence == true
   state.shot_remaining, state.shot_pressed = nil, nil
   clearPreparation(state)
@@ -554,6 +581,7 @@ local function release(state, intent, energy, level, cfg, reason)
   if not reason and state.cadence_charge then reason = 'cadence_release_c' .. level end
   state.target_level, state.fresh_charge, state.attack_ids = nil, nil, nil
   state.c1_profile_charge = nil
+  state.c1_resource_charge, state.c1_seed_ids, state.c1_lost_age = nil, nil, nil
   clearPreparation(state)
   state.armed_age, state.overlap_wait = nil, nil
   state.cadence_charge, state.since_c = nil, 0
@@ -613,6 +641,17 @@ local function matureCharge(state, intent, p, obs, cfg, level)
     if stopped then
       return release(state, intent, number(p.currentChargeMax), 1, cfg, 'c2_reserve_' .. stopped)
     end
+    if state.c1_resource_charge and not state.cadence_charge and not c1StillUseful(state, obs, cfg) then
+      state.c1_lost_age = (state.c1_lost_age or 0) + 1
+      if safe and state.c1_lost_age < setting(cfg, 'c1_revalidate_max_frames') then
+        return result(state, intent, true, 'armed', 'wait_c1_seed')
+      end
+      -- A charge already >=100 cannot be cancelled by releasing Z. Bound this
+      -- stale-plan exit and release inside C1's band rather than drifting to C2.
+      return release(state, intent, number(p.currentChargeMax), 1, cfg,
+        safe and 'c1_seed_wait_limit' or 'c1_seed_charge_ceiling')
+    end
+    state.c1_lost_age = nil
   end
   -- Bloom releases are prompt: the recorded PVP rhythm does not hold a mature
   -- charge for a better chain shape. The charge ceiling still ends the wait.
@@ -649,6 +688,7 @@ function M.update(game_side, state, cfg, obs)
     -- A hit interrupts our command plan. Do not replay a pre-hit release.
     state.target_level, state.shot_remaining, state.fresh_charge, state.attack_ids = nil, nil, nil, nil
     state.cadence_charge = nil
+    state.c1_profile_charge, state.c1_resource_charge, state.c1_seed_ids, state.c1_lost_age = nil, nil, nil, nil
     clearPreparation(state)
     state.armed_age = nil
     state.settle = setting(cfg, 'release_settle_frames')
@@ -664,6 +704,7 @@ function M.update(game_side, state, cfg, obs)
     -- a missed HP transition leaves life unchanged in this snapshot.
     state.target_level, state.shot_remaining, state.fresh_charge, state.attack_ids = nil, nil, nil, nil
     state.cadence_charge, state.focus, state.fast_frames = nil, false, 0
+    state.c1_profile_charge, state.c1_resource_charge, state.c1_seed_ids, state.c1_lost_age = nil, nil, nil, nil
     clearPreparation(state)
     state.armed_age = nil
     state.followup, state.followup_pending = nil, nil
@@ -713,6 +754,7 @@ function M.update(game_side, state, cfg, obs)
         clearRefillEvidence(state)
         state.target_level, state.cadence_charge = 2, deadline_level == 2
         state.attack_ids = state.cadence_charge and nil or chainIds(obs.c2 or {})
+        state.c1_profile_charge, state.c1_resource_charge, state.c1_seed_ids, state.c1_lost_age = nil, nil, nil, nil
       else
         endReserve(state, 'c2_not_needed')
         return release(state, intent, energy, charged >= 200 and 2 or 1, cfg, 'c2_reserve_c2_not_needed')
@@ -726,6 +768,7 @@ function M.update(game_side, state, cfg, obs)
       -- A pending C1 cannot indefinitely postpone the independent C2 clock.
       if not state.cadence_charge or deadline_level == 2 then state.target_level = deadline_level end
       state.cadence_charge, state.attack_ids = true, nil
+      state.c1_resource_charge, state.c1_seed_ids, state.c1_lost_age = nil, nil, nil
     end
     if sensor.canCharge ~= false and state.fresh_charge and charged >= 200 then
       state.target_level = 2
@@ -735,8 +778,19 @@ function M.update(game_side, state, cfg, obs)
       if energy >= 100 or charged >= 100 then state.target_level = 1
       else
         state.target_level, state.fresh_charge, state.attack_ids, state.cadence_charge = nil, nil, nil, nil
+        state.c1_profile_charge, state.c1_resource_charge, state.c1_seed_ids, state.c1_lost_age = nil, nil, nil, nil
         return result(state, intent, false, 'grow', 'need_charge_energy')
       end
+    end
+    if state.target_level == 1 and state.c1_resource_charge and not state.cadence_charge
+        and charged < 100 and not c1StillUseful(state, obs, cfg) then
+      state.target_level, state.fresh_charge, state.attack_ids = nil, nil, nil
+      state.c1_resource_charge, state.c1_seed_ids, state.c1_profile_charge = nil, nil, nil
+      state.c1_lost_age = nil
+      endReserve(state, 'c1_seed_lost')
+      clearRefillEvidence(state)
+      state.settle = max(1, setting(cfg, 'shot_settle_frames'))
+      return result(state, intent, false, 'grow', 'c1_seed_lost_cancel')
     end
     if state.target_level == 2 then c2Intent(intent, obs) end
     local target = state.target_level * 100
@@ -930,7 +984,7 @@ function M.update(game_side, state, cfg, obs)
     end
     return result(state, intent, false, state.focus and 'focus' or 'grow', 'wait_for_overlap')
   end
-  local legacy_c1 = (not c1.valid or c1.model_limited == true) and energy >= 100 and enemies >= setting(cfg, 'c1_enemies')
+  local legacy_c1 = not c1.kill_model and (not c1.valid or c1.model_limited == true) and energy >= 100 and enemies >= setting(cfg, 'c1_enemies')
     and score >= setting(cfg, 'c1_score')
   if legacy_c1 and not missesWindow(obs, 1, p, sensor) then
     return beginCharge(state, intent, charged, 1, obs, false, prepared_ids)

@@ -49,6 +49,9 @@ M.defaults = {
   timing_gain_ratio = 1.2, -- Future/current bullet ratio for improving, not energy.
   capture_preference_margin = 0.15, -- Same score units as ordinary candidates.
   c1_prediction_updates = 60, -- Bounded linear projection, not shot lifetime.
+  c1_release_delay_updates = 0, -- Main supplies remaining warm-up/charge time.
+  c1_prepare_prediction_updates = 180,
+  c1_flight_prediction_updates = 90,
   c1_max_positions = 4,     -- Actual plus at most three lateral proposals.
   followup_travel_weight = 0.002, -- Small ranking cost, never C2 chain budget.
 }
@@ -81,6 +84,8 @@ local function settings(cfg)
   c.position_search_interval = max(1,min(30,floor(c.position_search_interval)))
   c.timing_min_gain, c.timing_gain_ratio = max(1,floor(c.timing_min_gain)), max(1,c.timing_gain_ratio)
   c.c1_prediction_updates = max(1,min(90,floor(c.c1_prediction_updates)))
+  c.c1_prepare_prediction_updates = max(1,min(180,floor(c.c1_prepare_prediction_updates)))
+  c.c1_flight_prediction_updates = max(1,min(90,floor(c.c1_flight_prediction_updates)))
   c.c1_max_positions = max(1,min(4,floor(c.c1_max_positions)))
   return c
 end
@@ -770,11 +775,20 @@ local function c1Models(sensor,c)
   local out={valid=false,limited=true,pending={},active={},action_active=false}
   local pending_seen,active_seen={},{}
   if type(profile)~='table' then return out end
+  -- This opt-in is exported only for the statically verified Reimu selector-1
+  -- model. Other characters retain their existing limited coverage estimates.
+  local known_other=finite(profile.character) and profile.character>=1 and profile.character<=15
+    and profile.character==floor(profile.character)
+  out.kill_model=profile.damageModelVersion~=nil and not known_other
+  out.kill_model_known=out.kill_model and profile.character==0 and profile.damageModelVersion==1
+  out.motion_model=out.kill_model_known
+  out.flight_updates=c.c1_flight_prediction_updates
   out.action_active=sensor.c1ActionActive==true
   out.remaining_only=out.action_active or profile.activeValid==true and
     type(profile.activeShots)=='table' and #profile.activeShots>0
   out.valid=profile.valid==true or profile.activeValid==true
   out.limited=profile.limited~=false or profile.valid~=true or profile.activeValid~=true
+    or profile.futureLimited==true
   local scale=finite(sensor.timeScale) and max(0,min(1,sensor.timeScale)) or 1
   local age=out.action_active and sensor.c1ActionAge or 0
   local duration=finite(profile.actionDuration) and profile.actionDuration or sensor.c1ActionDuration
@@ -790,13 +804,17 @@ local function c1Models(sensor,c)
         finite(shot.type) and shot.type>=0 and shot.type<=3 and shot.type==floor(shot.type)
       if valid and shot.spawnTick<duration and (not out.remaining_only or out.action_active and shot.spawnTick>age) then
         local delay=scale>0 and max(0,(shot.spawnTick-age)/scale) or math.huge
+        if not out.remaining_only then delay=delay+c.c1_release_delay_updates end
         local key=table.concat({shot.offsetX,shot.offsetY,shot.width,shot.height,shot.angle,shot.speed,delay,shot.type},':')
-        if delay<=c.c1_prediction_updates and not pending_seen[key] then
+        if delay<=c.c1_prepare_prediction_updates and (out.kill_model or not pending_seen[key]) then
           pending_seen[key]=true
+          if shot.movementModelVersion~=1 then out.motion_model=false end
           out.pending[#out.pending+1]={x=shot.offsetX,y=shot.offsetY,width=shot.width,height=shot.height,
             vx=math.cos(shot.angle)*shot.speed*scale,vy=math.sin(shot.angle)*shot.speed*scale,
-            delay=delay,horizon=c.c1_prediction_updates,scale=scale,absolute=out.action_active,
-            piercing=shot.type==2 or shot.type==3}
+            delay=delay,horizon=delay+c.c1_prediction_updates,scale=scale,absolute=out.action_active,
+            piercing=shot.type==2 or shot.type==3,damage=shot.damage,type=shot.type,
+            template_index=shot.templateIndex,linear_until=shot.linearUntilTick,
+            raw_vx=math.cos(shot.angle)*shot.speed,raw_vy=math.sin(shot.angle)*shot.speed,speed=shot.speed}
         end
       elseif not valid then out.limited=true end
     end
@@ -808,7 +826,7 @@ local function c1Models(sensor,c)
           finite(shot.width) and shot.width>0 and shot.width<=4096 and finite(shot.height) and shot.height>0 and shot.height<=4096 and
           finite(shot.damage) and shot.damage>0 and finite(shot.type) and shot.type>=0 and shot.type<=3 and shot.type==floor(shot.type) then
         local key=table.concat({shot.x,shot.y,shot.width,shot.height,shot.type},':')
-        if not active_seen[key] then out.active[#out.active+1]=shot;active_seen[key]=true end
+        if out.kill_model or not active_seen[key] then out.active[#out.active+1]=shot;active_seen[key]=true end
       elseif type(shot)~='table' or shot.damageReady~=false then out.limited=true end
     end
   end
@@ -840,6 +858,200 @@ local function c1Hit(node,centre,models,t,stats,include_active)
     end
   end
   return false,false
+end
+
+-- Enemy combat data is attached to the exact managed Enemy by the native
+-- bridge; never join by position. Every visible possible blocker participates,
+-- including a non-ignitable spirit or a protected target in front of a seed.
+local function c1CombatTargets(enemies,indexes)
+  local targets={}
+  for _,e in ipairs(enemies) do
+    if validObject(e) then
+      local q=e.combat
+      if type(q)~='table' or q.apiVersion~=1 or q.valid~=true or q.id~=e.id
+          or not stableId(e.id) or (q.side~=1 and q.side~=2)
+          or not finite(q.slotIndex) or q.slotIndex<1 or q.slotIndex>128 or q.slotIndex~=floor(q.slotIndex)
+          or not coordinate(q.x) or not coordinate(q.y) or not finite(q.hp)
+          or not finite(q.width) or q.width<0 or q.width>4096
+          or not finite(q.height) or q.height<0 or q.height>4096
+          or type(q.blocksShots)~='boolean' or type(q.damageable)~='boolean'
+          or type(q.shotCanIgnite)~='boolean'
+          or type(q.secondaryBlocksShots)~='boolean'
+          or not finite(q.secondaryWidth) or q.secondaryWidth<0 or q.secondaryWidth>4096
+          or not finite(q.secondaryHeight) or q.secondaryHeight<0 or q.secondaryHeight>4096
+          or (q.shotDamageDivisor~=1 and q.shotDamageDivisor~=2 and q.shotDamageDivisor~=4)
+          or not finite(e.vx) or not finite(e.vy) then return nil end
+      targets[#targets+1]={id=e.id,index=indexes[e.id],x=q.x,y=q.y,vx=e.vx,vy=e.vy,
+        width=q.width,height=q.height,hp=q.hp,slot=q.slotIndex,blocks=q.blocksShots,
+        damageable=q.damageable,divisor=q.shotDamageDivisor,
+        ignitable=q.shotCanIgnite and (not e.isSpirit or e.isActivatedSpirit==true)}
+      if q.secondaryBlocksShots then
+        -- The secondary native box can consume the projectile without adding
+        -- its raw damage to HP. Keep it as a blocker, never merge it into a
+        -- larger damaging box or let a shot pass through to a farther seed.
+        targets[#targets+1]={id=e.id,x=q.x,y=q.y,vx=e.vx,vy=e.vy,width=q.secondaryWidth,
+          height=q.secondaryHeight,hp=q.hp,slot=q.slotIndex,blocks=true,damageable=false,
+          divisor=q.shotDamageDivisor,ignitable=false}
+      end
+    end
+  end
+  return targets
+end
+
+local function c1CombatContact(target,centre,shot,t,active,stats)
+  stats.c1_hit_tests=stats.c1_hit_tests+1
+  local half_x,half_y=(shot.width+target.width)*.5,(shot.height+target.height)*.5
+  if active then
+    if abs(target.x-shot.x)<=half_x and abs(target.y-shot.y)<=half_y then return 0 end
+    return nil
+  end
+  -- Only the pre-homing segment is known. Reimu switches motion at age 40;
+  -- there is no invented straight ray after that callback starts steering.
+  if shot.type~=0 or not finite(shot.linear_until) or shot.linear_until<=0 then return nil end
+  local delay=shot.absolute and max(0,shot.delay-t) or shot.delay
+  local elapsed=shot.absolute and max(0,t-shot.delay) or 0
+  local horizon=shot.absolute and max(0,shot.horizon-t) or shot.horizon
+  horizon=min(horizon,delay+shot.linear_until/max(shot.scale,1e-9)-elapsed-1e-6)
+  local x,y=position(target,t)
+  local dx=x+target.vx*shot.scale*delay-centre.x-shot.x-shot.vx*elapsed
+  local dy=y+target.vy*shot.scale*delay-centre.y-shot.y-shot.vy*elapsed
+  local first,last=axisInterval(dx,target.vx*shot.scale-shot.vx,half_x,0,horizon-delay)
+  if first then first,last=axisInterval(dy,target.vy*shot.scale-shot.vy,half_y,first,last) end
+  if not first then return nil end
+  -- A continuous crossing shorter than an update is not a verified hit tick.
+  local contact=math.ceil(first+delay-1e-9)
+  if contact<=last+delay and contact<=horizon then return contact end
+end
+
+local function reimuMotionBudgets(targets,centre,models,t,stats,budgets)
+  local blocked=0
+  -- Native Reimu selector 1 has exactly four independently consumed shots.
+  -- One simulation per launch point advances the four trajectories together;
+  -- never rerun a whole trajectory for each possible enemy.
+  if #models.pending>4 then return 0,false end
+  local shots,min_delay,max_delay={},math.huge,0
+  for _,shot in ipairs(models.pending) do
+    if shot.type~=0 or shot.damage~=30 or not finite(shot.speed) or shot.speed<=0
+        or shot.linear_until~=40 then return 0,false end
+    local delay=shot.absolute and max(0,shot.delay-t) or shot.delay
+    local spawn=math.ceil(delay)
+    shots[#shots+1]={x=centre.x+shot.x,y=centre.y+shot.y,vx=shot.raw_vx,vy=shot.raw_vy,
+      speed=shot.speed,age=0,previous=-1,spawn=spawn,scale=shot.scale,
+      width=shot.width,height=shot.height,damage=shot.damage,alive=true}
+    min_delay=min(min_delay,spawn);max_delay=max(max_delay,spawn)
+  end
+  if #shots==0 then return 0,true end
+  local scale=shots[1].scale
+  local ordered={}
+  for _,target in ipairs(targets) do if target.blocks then ordered[#ordered+1]=target end end
+  table.sort(ordered,function(a,b)
+    if a.slot~=b.slot then return a.slot<b.slot end
+    return a.index~=nil and b.index==nil
+  end)
+  if #ordered==0 then return 0,true end
+  for frame=min_delay+1,max_delay+models.flight_updates do
+    local needs_homing=false
+    for _,shot in ipairs(shots) do
+      local age=floor(shot.age)
+      if shot.alive and frame>shot.spawn and age>=40 and age~=shot.previous then needs_homing=true;break end
+    end
+    local nearest,nearest_distance
+    for _,target in ipairs(ordered) do
+      target.pred_x=target.x+target.vx*scale*(t+frame)
+      target.pred_y=target.y+target.vy*scale*(t+frame)
+      if needs_homing then
+        local d=distance2(target.pred_x,target.pred_y,centre.x,centre.y)
+        if not nearest_distance or d<nearest_distance then nearest,nearest_distance=target,d end
+      end
+    end
+    local alive=false
+    for _,shot in ipairs(shots) do
+      if shot.alive and frame>shot.spawn and frame<=shot.spawn+models.flight_updates then
+        alive=true;stats.c1_motion_steps=stats.c1_motion_steps+1
+        local age=floor(shot.age)
+        if age>=40 and age~=shot.previous then
+          if nearest then
+            local dx,dy=nearest.pred_x-shot.x,nearest.pred_y-shot.y
+            local dist=sqrt(dx*dx+dy*dy)
+            local gain=1/max(dist/(shot.speed*.25),1)
+            local vx,vy=shot.vx+dx*gain,shot.vy+dy*gain
+            local norm=sqrt(vx*vx+vy*vy)
+            if norm<=1e-12 then shot.alive=false
+            else
+              shot.speed=min(10,max(1,norm))
+              shot.vx,shot.vy=vx/norm*shot.speed,vy/norm*shot.speed
+            end
+          else
+            if shot.speed<10 then shot.speed=shot.speed+0.3333333432674408 end
+            local norm=sqrt(shot.vx*shot.vx+shot.vy*shot.vy)
+            if norm<=1e-12 then shot.alive=false
+            else shot.vx,shot.vy=shot.vx/norm*shot.speed,shot.vy/norm*shot.speed end
+          end
+        end
+        if shot.alive then
+          shot.x,shot.y=shot.x+shot.vx*scale,shot.y+shot.vy*scale
+          shot.previous,shot.age=age,shot.age+scale
+          for _,target in ipairs(ordered) do
+            stats.c1_hit_tests=stats.c1_hit_tests+1
+            if abs(target.pred_x-shot.x)<=(shot.width+target.width)*.5
+                and abs(target.pred_y-shot.y)<=(shot.height+target.height)*.5 then
+              shot.alive=false
+              if target.damageable and target.ignitable and target.hp>0 and target.index then
+                local value=budgets[target.index] or {damage=0,hp=target.hp,active=false}
+                value.damage=value.damage+floor(shot.damage/target.divisor);budgets[target.index]=value
+              else blocked=blocked+1 end
+              break
+            end
+          end
+        end
+      end
+    end
+    if frame>=max_delay then
+      local pending=false
+      for _,shot in ipairs(shots) do if shot.alive then pending=true;break end end
+      if not pending or not alive then break end
+    end
+  end
+  return blocked,true
+end
+
+local function c1KillBudget(targets,centre,models,t,include_active,stats)
+  if not targets or not models.kill_model_known then return {},0,0,false end
+  local budgets,blocked={},0
+  local function claim(shot,active)
+    if shot.type~=0 or not finite(shot.damage) or shot.damage<=0 then return end
+    local best,contact
+    for _,target in ipairs(targets) do
+      if target.blocks then
+        local at=c1CombatContact(target,centre,shot,t,active,stats)
+        if at and (not contact or at<contact or at==contact and target.slot<best.slot) then
+          best,contact=target,at
+        end
+      end
+    end
+    if not best then return end
+    if not best.damageable or not best.ignitable or best.hp<=0 or not best.index then
+      blocked=blocked+1;return
+    end
+    local value=budgets[best.index] or {damage=0,hp=best.hp,active=false}
+    -- Per-shot truncation never exceeds the engine's same-tick accumulated
+    -- damage. Verified Reimu damage 30 divides exactly by 1/2 for legal seeds.
+    value.damage=value.damage+floor(shot.damage/best.divisor)
+    value.active=value.active or active
+    budgets[best.index]=value
+  end
+  if include_active then for _,shot in ipairs(models.active) do claim(shot,true) end end
+  if models.motion_model then
+    local motion_blocked,known=reimuMotionBudgets(targets,centre,models,t,stats,budgets)
+    if not known then return {},0,blocked,false end
+    blocked=blocked+motion_blocked
+  else for _,shot in ipairs(models.pending) do claim(shot,false) end end
+  local kills,rejected={},0
+  for index,budget in pairs(budgets) do
+    if budget.damage>=budget.hp then kills[index]=budget
+    else rejected=rejected+1 end
+  end
+  return kills,rejected,blocked,true
 end
 local function unionResources(selected,nodes,indexes,grid,c,originals,t,stats)
   local out={enemies=0,fairies=0,spirits=0,activated=0,bullets=0,score=0,ids={},cells={},id_set={}}
@@ -876,11 +1088,15 @@ local function c1UnionTiming(current,later,bullets,c,stats)
     out.future_bullets>=out.current_bullets*c.timing_gain_ratio
   return out
 end
-local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,state,stats,capture,candidates)
+local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,state,stats,capture,candidates,enemies)
   local models=c1Models(p.sensor,c)
+  local targets=models.kill_model and c1CombatTargets(enemies,indexes) or nil
   local function assess(centre,actual)
     local out=emptyC1()
     out.valid,out.model_limited=models.valid,models.limited
+    out.kill_model=models.kill_model==true
+    out.release_delay_updates=models.remaining_only and 0 or c.c1_release_delay_updates
+    out.hp_rejected,out.blocked_shots,out.combat_valid=0,0,not out.kill_model
     out.action_active,out.remaining_only=models.action_active,models.remaining_only==true
     out.target_x,out.target_y=centre.x,centre.y
     out.active_hit_count,out.pending_hit_count=0,0
@@ -889,12 +1105,19 @@ local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,st
     stats.c1_position_evaluations=stats.c1_position_evaluations+1
     local groups,seeds,claims={}, {}, {}
     local function take(i,active)
+      if type(state.c1_seed_ids)=='table' and not state.c1_seed_ids[nodes[i].id] then return end
       groups[now[i]],seeds[i]=true,true
       out.seed_ids[#out.seed_ids+1]=nodes[i].id
       if active then out.active_hit_count=out.active_hit_count+1
       else out.pending_hit_count=out.pending_hit_count+1 end
     end
-    for i,node in ipairs(nodes) do
+    if models.kill_model then
+      local kills,rejected,blocked,valid=c1KillBudget(targets,centre,models,0,actual,stats)
+      out.hp_rejected,out.blocked_shots,out.combat_valid=rejected,blocked,valid
+      for i,budget in pairs(kills) do
+        if now[i] and nodes[i].ignitable and c2LockAllows(state,nodes[i],now[i]) then take(i,budget.active) end
+      end
+    else for i,node in ipairs(nodes) do
       if now[i] then
         local hit,active,shot,contact=c1Hit(node,centre,models,0,stats,actual)
         if hit then
@@ -907,9 +1130,15 @@ local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,st
     for _,claim in pairs(claims) do
       if c2LockAllows(state,nodes[claim.i],now[claim.i]) then take(claim.i,claim.active) end
     end
+    end
     local current=unionResources(groups,nodes,indexes,grid,c,nil,0,stats)
     local later_groups,later_claims={},{}
-    for i,node in ipairs(nodes) do
+    if models.kill_model then
+      -- The future resource sample belongs to this already assessed launch,
+      -- not a second fresh C1 launched at the future point. Retain only its
+      -- original eligible seeds instead of simulating/budgeting the shot twice.
+      for i in pairs(seeds) do if future[i] then later_groups[future[i]]=true end end
+    else for i,node in ipairs(nodes) do
       if future[i] then
         -- Already spawned custom-motion shots support only current geometry.
         local hit,_,shot,contact=c1Hit(node,centre,models,c.prediction_frames,stats,false)
@@ -922,6 +1151,7 @@ local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,st
     end
     for _,claim in pairs(later_claims) do
       if seeds[claim.i] then later_groups[future[claim.i]]=true end
+    end
     end
     local later=unionResources(later_groups,nodes,indexes,future_grid,c,current.id_set,c.prediction_frames,stats)
     out.has_ignition,out.hit_count=current.enemies>0,#out.seed_ids
@@ -1086,7 +1316,9 @@ end
 -- callbacks never acquire invented beam/circle geometry. Existing C1 objects use
 -- supported damage-ready CURRENT AABBs only. Active/lingering type-1 actions set
 -- remaining_only and cannot replay the full template as a fresh C1 budget.
--- Potential contact is not enemy death, return or energy; HP is not exported.
+-- For the verified Reimu model, exact Enemy.combat IDs/HP and conservative
+-- per-projectile damage gate eligible seeds; unknown combat metadata cannot
+-- supply a seed. Other models still describe contact, not death/return/energy.
 -- Non-piercing templates select their first predicted ordinary ignition target.
 -- C1 sites cache only coordinates at the existing search cadence, not resources.
 -- Actual listed type-1 common waves exclude potentially directly swallowed
@@ -1115,7 +1347,7 @@ function M.observe(game_side, state, cfg)
       c2_enemy_pair_tests = 0, c2_grid_queries = 0, c2_bullet_tests = 0, c2_position_candidates = 0,
       c2_position_evaluations = 0, c2_position_full_search = false,
       timing_bullet_tests=0,timing_grid_queries=0,common_wave_tests=0,
-      c1_hit_tests=0,c1_position_evaluations=0 },
+      c1_hit_tests=0,c1_position_evaluations=0,c1_motion_steps=0 },
   }
   state = type(state) == "table" and state or {}
   local p = type(game_side) == "table" and game_side.player
@@ -1350,7 +1582,7 @@ function M.observe(game_side, state, cfg)
   result.capture=assessCapture(nodes,spirits,indexes,now,future,future_grid,timing_bullets,
     p,c,state,stats,activated_ids,best)
   result.c1,result.c1_position=assessC1(c2_nodes,c2_indexes,c2_now,c2_future,c2_grid,c2_future_grid,
-    timing_bullets,p,c,state,stats,result.capture,candidates)
+    timing_bullets,p,c,state,stats,result.capture,candidates,enemies)
   followupPosition(result,p,c)
   state.bloom_observer_spirits = new_spirits
   -- Mean observed speed of whole-field erasable bullets. Zero means "no usable

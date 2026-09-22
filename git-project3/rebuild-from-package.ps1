@@ -1,6 +1,6 @@
-﻿param(
+param(
     [Parameter(Mandatory = $true)] [string] $CompilerPath,
-    [string] $Version = '3.3.0-test',
+    [string] $Version = '3.5.0-test',
     [switch] $Overwrite
 )
 $ErrorActionPreference = 'Stop'

@@ -49,6 +49,7 @@ M.defaults = {
   timing_gain_ratio = 1.2, -- Future/current bullet ratio for improving, not energy.
   capture_preference_margin = 0.15, -- Same score units as ordinary candidates.
   c1_prediction_updates = 60, -- Bounded linear projection, not shot lifetime.
+  reimu_c1_prediction_updates = 90, -- Includes the verified 40-Timer homing delay.
   c1_max_positions = 4,     -- Actual plus at most three lateral proposals.
   followup_travel_weight = 0.002, -- Small ranking cost, never C2 chain budget.
 }
@@ -81,6 +82,7 @@ local function settings(cfg)
   c.position_search_interval = max(1,min(30,floor(c.position_search_interval)))
   c.timing_min_gain, c.timing_gain_ratio = max(1,floor(c.timing_min_gain)), max(1,c.timing_gain_ratio)
   c.c1_prediction_updates = max(1,min(90,floor(c.c1_prediction_updates)))
+  c.reimu_c1_prediction_updates = max(1,min(90,floor(c.reimu_c1_prediction_updates)))
   c.c1_max_positions = max(1,min(4,floor(c.c1_max_positions)))
   return c
 end
@@ -765,11 +767,16 @@ local function axisInterval(delta,velocity,half,first,last)
   first,last=max(first,a),min(last,b)
   if first<=last then return first,last end
 end
-local function c1Models(sensor,c)
+local function c1Models(sensor,c,reimu)
   local profile=type(sensor)=='table' and sensor.followupApiVersion==1 and sensor.c1Profile
   local out={valid=false,limited=true,pending={},active={},action_active=false}
+  out.reimu=reimu==true
   local pending_seen,active_seen={},{}
   if type(profile)~='table' then return out end
+  out.homing_valid=profile.homingTargetValid==true and coordinate(profile.homingTargetX) and coordinate(profile.homingTargetY)
+  out.homing_state_valid=profile.homingStateValid==true
+  out.homing_x,out.homing_y=profile.homingTargetX,profile.homingTargetY
+  out.reimu_profile_valid=profile.valid==true and profile.activeValid==true
   out.action_active=sensor.c1ActionActive==true
   out.remaining_only=out.action_active or profile.activeValid==true and
     type(profile.activeShots)=='table' and #profile.activeShots>0
@@ -783,20 +790,22 @@ local function c1Models(sensor,c)
   if profile.valid==true and type(profile.shots)=='table' then
     for index,shot in ipairs(profile.shots) do
       if index>128 then out.limited=true;break end
-      local valid=type(shot)=='table' and shot.supported==true and
+      local special=type(shot)=='table' and reimu and shot.motionModel=='reimu_c1_homing'
+      local valid=type(shot)=='table' and (shot.supported==true or special) and
         finite(shot.spawnTick) and shot.spawnTick>=0 and finite(shot.offsetX) and finite(shot.offsetY) and
         finite(shot.width) and shot.width>0 and shot.width<=4096 and finite(shot.height) and shot.height>0 and shot.height<=4096 and
         finite(shot.angle) and finite(shot.speed) and abs(shot.speed)<=256 and finite(shot.damage) and shot.damage>0 and
         finite(shot.type) and shot.type>=0 and shot.type<=3 and shot.type==floor(shot.type)
       if valid and shot.spawnTick<duration and (not out.remaining_only or out.action_active and shot.spawnTick>age) then
         local delay=scale>0 and max(0,(shot.spawnTick-age)/scale) or math.huge
-        local key=table.concat({shot.offsetX,shot.offsetY,shot.width,shot.height,shot.angle,shot.speed,delay,shot.type},':')
+        local key=reimu and index or table.concat({shot.offsetX,shot.offsetY,shot.width,shot.height,shot.angle,shot.speed,delay,shot.type},':')
         if delay<=c.c1_prediction_updates and not pending_seen[key] then
           pending_seen[key]=true
           out.pending[#out.pending+1]={x=shot.offsetX,y=shot.offsetY,width=shot.width,height=shot.height,
             vx=math.cos(shot.angle)*shot.speed*scale,vy=math.sin(shot.angle)*shot.speed*scale,
             delay=delay,horizon=c.c1_prediction_updates,scale=scale,absolute=out.action_active,
-            piercing=shot.type==2 or shot.type==3}
+            piercing=shot.type==2 or shot.type==3,type=shot.type,damage=shot.damage,
+            speed=shot.speed,motion_model=special and 'reimu_c1_homing' or nil}
         end
       elseif not valid then out.limited=true end
     end
@@ -807,8 +816,10 @@ local function c1Models(sensor,c)
       if type(shot)=='table' and shot.supported==true and shot.damageReady~=false and coordinate(shot.x) and coordinate(shot.y) and
           finite(shot.width) and shot.width>0 and shot.width<=4096 and finite(shot.height) and shot.height>0 and shot.height<=4096 and
           finite(shot.damage) and shot.damage>0 and finite(shot.type) and shot.type>=0 and shot.type<=3 and shot.type==floor(shot.type) then
-        local key=table.concat({shot.x,shot.y,shot.width,shot.height,shot.type},':')
-        if not active_seen[key] then out.active[#out.active+1]=shot;active_seen[key]=true end
+        -- Native slots identify independent cards even when their AABBs overlap.
+        local key=reimu and shot.slotId or table.concat({shot.x,shot.y,shot.width,shot.height,shot.type},':')
+        if reimu and (not finite(key) or key<0 or key~=floor(key)) then out.limited=true
+        elseif not active_seen[key] then out.active[#out.active+1]=shot;active_seen[key]=true end
       elseif type(shot)~='table' or shot.damageReady~=false then out.limited=true end
     end
   end
@@ -876,8 +887,235 @@ local function c1UnionTiming(current,later,bullets,c,stats)
     out.future_bullets>=out.current_bullets*c.timing_gain_ratio
   return out
 end
-local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,state,stats,capture,candidates)
-  local models=c1Models(p.sensor,c)
+
+-- Reimu's four non-piercing cards use a verified custom motion callback.
+-- Keep this separate from generic SHT coverage: contact must fund a kill,
+-- protected/boss targets still consume cards, and unactivated spirits never
+-- become direct C1 seeds. Forecasts retain the CURRENT homing target only;
+-- new spawns, target switches, other shots and blast damage supply no credit.
+local function reimuDamageSeeds(enemies,centre,models,p,c,stats,t,actual)
+  local targets,seeds={},{}
+  local sensor=p.sensor or {}
+  local scale=finite(sensor.timeScale) and sensor.timeScale or 0
+  local valid=models.reimu_profile_valid and scale==1
+  if not valid then return false,seeds,0,0 end
+  local release_delay=0
+  if not models.remaining_only then
+    if not finite(p.chargeSpeed) or p.chargeSpeed<=0 or not finite(p.currentCharge)
+        or not finite(sensor.chargeWarmupFrames) then return false,seeds,0,0 end
+    release_delay=math.ceil(max(0,100-p.currentCharge)/p.chargeSpeed
+      +max(0,sensor.chargeWarmupFrames))
+    if release_delay>90 then return false,seeds,0,0 end
+  end
+  local goal,ambiguous_goal=nil,false
+  for _,e in ipairs(enemies or {}) do
+    if validObject(e) and e.enabled~=false and e.enabled~=0 then
+      local s=e.sensor
+      if #targets>=128 or not stableId(e.id) or type(s)~='table' or s.apiVersion~=1 or s.valid~=true
+          or not finite(s.health) or s.health<0 or s.health~=floor(s.health)
+          or type(s.shotCollisionEnabled)~='boolean' or type(s.shotDamageable)~='boolean'
+          or not finite(s.shotDamageDivisor) or s.shotDamageDivisor<1
+          or not coordinate(s.hitX) or not coordinate(s.hitY)
+          or not finite(s.hitWidth) or s.hitWidth<0 or s.hitWidth>4096
+          or not finite(s.hitHeight) or s.hitHeight<0 or s.hitHeight>4096
+          or not finite(e.vx) or not finite(e.vy) then return false,{},0,0 end
+      -- Unknown extra collision geometry can consume cards before another
+      -- target, so merely withholding this enemy's own kill credit is unsafe.
+      if s.shotCollisionEnabled and s.damageModelLimited==true then return false,{},0,0 end
+      local v={id=e.id,x=s.hitX,y=s.hitY,vx=e.vx,vy=e.vy,health=s.health,
+        width=s.hitWidth,height=s.hitHeight,collision=s.shotCollisionEnabled,
+        damageable=s.shotDamageable and s.damageModelLimited~=true,divisor=s.shotDamageDivisor,
+        seed=not(e.isBoss or e.isLily or e.isPseudoEnemy) and (not e.isSpirit or e.isActivatedSpirit==true)}
+      targets[#targets+1]=v
+      if models.homing_valid and abs(s.hitX-models.homing_x)<.01 and abs(s.hitY-models.homing_y)<.01 then
+        if goal then ambiguous_goal=true else goal=v end
+      end
+    end
+  end
+  -- Unmatched/ambiguous native homing targets are not invented future paths.
+  local can_project=models.homing_state_valid and (not models.homing_valid or goal and not ambiguous_goal)
+  local projectiles={}
+  if can_project then
+    for _,s in ipairs(models.pending) do
+      if s.motion_model=='reimu_c1_homing' and s.type==0 and s.damage>0 then
+        projectiles[#projectiles+1]={x=centre.x+s.x,y=centre.y+s.y,vx=s.vx,vy=s.vy,
+          speed=s.speed,damage=s.damage,width=s.width,height=s.height,delay=s.delay,alive=true}
+      end
+    end
+  end
+  local hits,last_kill=0,0
+  -- Swept target bins only reduce collision candidates; every queried hit is
+  -- still checked against the exact projected primary AABB. Include charge
+  -- lead, enemy velocity and the largest relevant card. Large sweeps use a
+  -- bounded fallback list rather than allocating an unbounded grid.
+  local hit_grid,wide={},{}
+  local half_x,half_y=0,0
+  for _,s in ipairs(projectiles) do half_x=max(half_x,s.width*.5);half_y=max(half_y,s.height*.5) end
+  for _,s in ipairs(models.active) do half_x=max(half_x,s.width*.5);half_y=max(half_y,s.height*.5) end
+  local horizon=models.remaining_only and 0 or c.reimu_c1_prediction_updates
+  for i,v in ipairs(targets) do
+    if v.collision and v.health>0 then
+      v.start_x,v.start_y=v.x+v.vx*(t+release_delay),v.y+v.vy*(t+release_delay)
+      local ex,ey=v.start_x+v.vx*horizon,v.start_y+v.vy*horizon
+      local x1,x2=floor((min(v.start_x,ex)-v.width*.5-half_x)/64),floor((max(v.start_x,ex)+v.width*.5+half_x)/64)
+      local y1,y2=floor((min(v.start_y,ey)-v.height*.5-half_y)/64),floor((max(v.start_y,ey)+v.height*.5+half_y)/64)
+      if (x2-x1+1)*(y2-y1+1)>128 then wide[#wide+1]=i
+      else
+        for x=x1,x2 do for y=y1,y2 do
+          local k=cellKey(x,y);local list=hit_grid[k] or {};hit_grid[k]=list;list[#list+1]=i
+        end end
+      end
+    end
+  end
+  local function claim(shot,x,y,damage,clock)
+    local first,overlap=nil,false
+    local function scan(list)
+      for _,i in ipairs(list) do
+        local v=targets[i]
+        if v.health>0 then
+        stats.c1_hit_tests=stats.c1_hit_tests+1
+        -- AABB size includes the actual enemy hitbox. Ambiguous simultaneous
+        -- contacts consume a non-piercing card without guessing slot order.
+          if abs(v.start_x+v.vx*clock-x)<(shot.width+v.width)*.5 and
+              abs(v.start_y+v.vy*clock-y)<(shot.height+v.height)*.5 then
+            if first then overlap=true;return else first=i end
+          end
+        end
+      end
+    end
+    local list=hit_grid[cellKey(floor(x/64),floor(y/64))]
+    if list then scan(list) end
+    if not overlap then scan(wide) end
+    if first and not overlap then damage[first]=(damage[first] or 0)+shot.damage;hits=hits+1 end
+    return first~=nil
+  end
+  local function applyDamage(damage,clock)
+    for i,amount in pairs(damage) do
+      local v=targets[i]
+      if v.damageable then
+        v.health=v.health-floor(amount/v.divisor)
+        if v.health<=0 and v.seed then
+          seeds[v.id]=release_delay+clock;last_kill=max(last_kill,release_delay+clock)
+        end
+      end
+    end
+  end
+  -- Already spawned custom cards are known only at their current AABB.
+  -- Do not extrapolate their velocity or count another hit after consumption.
+  if actual and t==0 then
+    local damage={}
+    for _,s in ipairs(models.active) do
+      if s.type==0 and s.supported==true then claim(s,s.x,s.y,damage,0) end
+    end
+    applyDamage(damage,0)
+  end
+  if models.remaining_only then return valid,seeds,hits,last_kill end
+  for clock=0,horizon do
+    local damage={}
+    for _,s in ipairs(projectiles) do
+      if s.alive and clock>=s.delay then
+        if claim(s,s.x,s.y,damage,clock) then s.alive=false end
+      end
+    end
+    applyDamage(damage,clock)
+    for _,s in ipairs(projectiles) do
+      if s.alive and clock>=s.delay then
+        local age=clock-s.delay
+        if age>=40 then
+          local vx,vy=s.vx,s.vy
+          if goal then
+            -- Once the retained target dies, do not manufacture retargets.
+            if goal.health<=0 then s.alive=false end
+            local dt=t+release_delay+clock
+            local dx,dy=goal.x+goal.vx*dt-s.x,goal.y+goal.vy*dt-s.y
+            local d=sqrt(dx*dx+dy*dy)
+            local divisor=max(1,d/(max(.001,s.speed)*.25))
+            vx,vy=vx+dx/divisor,vy+dy/divisor
+            local speed=sqrt(vx*vx+vy*vy)
+            s.speed=max(1,min(10,speed))
+            if speed>1e-9 then s.vx,s.vy=vx*s.speed/speed,vy*s.speed/speed end
+          else
+            if s.speed<10 then s.speed=s.speed+1/3 end
+            local speed=sqrt(vx*vx+vy*vy)
+            if speed>1e-9 then s.vx,s.vy=vx*s.speed/speed,vy*s.speed/speed end
+          end
+        end
+        s.x,s.y=s.x+s.vx,s.y+s.vy
+      end
+    end
+  end
+  return valid,seeds,hits,last_kill
+end
+
+-- Value each funded seed where its cards are predicted to kill it, not where
+-- the target/whites were when Z was pressed. Only original component members
+-- may relay; drifting new arrivals cannot bridge the original chain. Resource
+-- propagation/radius remains a heuristic, not an engine blast simulation.
+local function reimuImpactResources(kills,nodes,indexes,original,bullets,p,c,state,stats,offset,originals)
+  local out={enemies=0,fairies=0,spirits=0,activated=0,bullets=0,score=0,ids={},id_set={},bullet_ids={},seed_ids={}}
+  local ordered={}
+  for id,delay in pairs(kills) do ordered[#ordered+1]={id=id,delay=delay} end
+  table.sort(ordered,function(a,b) return a.delay<b.delay or a.delay==b.delay and tostring(a.id)<tostring(b.id) end)
+  for _,event in ipairs(ordered) do
+    local id,delay=event.id,event.delay
+    local seed=indexes[id]
+    local group=seed and original[seed]
+    if group and not out.id_set[id] and (not originals or originals[id]) and c2LockAllows(state,nodes[seed],group) then
+      local time=offset+delay
+      local retained,ri={},{}
+      for _,member in ipairs(group.ids) do
+        -- Members consumed by an earlier modeled explosion cannot explode
+        -- again at a later card hit to collect newly arriving white bullets.
+        if not out.id_set[member] and (not originals or originals[member]) then
+          local node=nodes[indexes[member]]
+          retained[#retained+1]=node;ri[member]=#retained
+        end
+      end
+      local projected=components(retained,time,{},p,c,stats,nil,nil,true)
+      local impact=projected[ri[id]]
+      if impact then
+        out.seed_ids[#out.seed_ids+1]=id
+        local cells={}
+        for _,member in ipairs(impact.ids) do
+          local node=nodes[indexes[member]]
+          addTimingCells(cells,node,time,c,stats)
+          if not out.id_set[member] then
+            out.id_set[member]=true;out.ids[#out.ids+1]=member;out.enemies=out.enemies+1
+            local kind=node.activated and 'activated' or node.spirit and 'spirits' or 'fairies'
+            out[kind]=out[kind]+1
+            out.score=out.score+(node.activated and c.activated_weight or node.spirit and c.spirit_weight or c.enemy_weight)
+          end
+        end
+        for i,b in ipairs(bullets) do
+          stats.timing_bullet_tests=stats.timing_bullet_tests+1
+          -- Missing velocity cannot promise that a white will stay until impact.
+          if not out.bullet_ids[i] and (time==0 or b.velocity_known) then
+            local x,y=position(b,time)
+            if inField(x,y) and cells[cellKey(floor(x/c.grid_size),floor(y/c.grid_size))] then
+              out.bullet_ids[i]=true;out.bullets=out.bullets+1
+            end
+          end
+        end
+      end
+    end
+  end
+  out.score=out.score+min(out.bullets,c.bullet_score_cap)*c.bullet_weight
+  return out
+end
+local function reimuImpactTiming(current,later,c)
+  local out=emptyTiming(c.prediction_frames)
+  out.valid,out.at_impact=current.enemies>0,true
+  out.current_bullets,out.future_bullets=current.bullets,later.bullets
+  for i in pairs(current.bullet_ids) do if not later.bullet_ids[i] then out.leaving_bullets=out.leaving_bullets+1 end end
+  for i in pairs(later.bullet_ids) do if not current.bullet_ids[i] then out.arriving_bullets=out.arriving_bullets+1 end end
+  out.urgency=out.leaving_bullets>0
+  out.improving=out.future_bullets-out.current_bullets>=c.timing_min_gain and
+    out.future_bullets>=out.current_bullets*c.timing_gain_ratio
+  return out
+end
+
+local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,state,stats,capture,candidates,enemies)
+  local models=c1Models(p.sensor,c,p.character==0)
   local function assess(centre,actual)
     local out=emptyC1()
     out.valid,out.model_limited=models.valid,models.limited
@@ -887,6 +1125,25 @@ local function assessC1(nodes,indexes,now,future,grid,future_grid,bullets,p,c,st
     out.profile='native-sht-selector1-and-current-aabb'
     if not models.valid then return out end
     stats.c1_position_evaluations=stats.c1_position_evaluations+1
+    if models.reimu then
+      local valid,kills,hits,kill_time=reimuDamageSeeds(enemies,centre,models,p,c,stats,0,actual)
+      out.damage_model_valid,out.kill_count,out.contact_count=valid,0,hits
+      out.kill_delay,out.profile=kill_time,'reimu-c1-hp-and-retained-homing-target'
+      local later_valid,later_kills=reimuDamageSeeds(enemies,centre,models,p,c,stats,c.prediction_frames,false)
+      -- Both alternatives retain the same original component, projected to
+      -- their respective hit times. Already spawned cards are never replayed.
+      local current=reimuImpactResources(kills,nodes,indexes,now,bullets,p,c,state,stats,0)
+      local later=reimuImpactResources(later_valid and later_kills or {},nodes,indexes,now,bullets,p,c,state,stats,c.prediction_frames,current.id_set)
+      out.seed_ids,out.kill_count=current.seed_ids,#current.seed_ids
+      out.has_ignition,out.hit_count=valid and out.kill_count>0,hits
+      out.chain_ids,out.chain_enemies,out.chain_fairies,out.chain_spirits,out.chain_activated=current.ids,current.enemies,current.fairies,current.spirits,current.activated
+      out.chain_score,out.chain_bullets=current.score,current.bullets
+      out.future_has_ignition,out.future_score,out.future_bullets=later.enemies>0,later.score,later.bullets
+      out.future_enemies,out.future_fairies,out.future_spirits,out.future_activated=later.enemies,later.fairies,later.spirits,later.activated
+      out.value=max(current.score,later.score*c.future_discount)
+      if actual then out.timing=reimuImpactTiming(current,later,c) end
+      return out
+    end
     local groups,seeds,claims={}, {}, {}
     local function take(i,active)
       groups[now[i]],seeds[i]=true,true
@@ -1335,7 +1592,7 @@ function M.observe(game_side, state, cfg)
   result.capture=assessCapture(nodes,spirits,indexes,now,future,future_grid,timing_bullets,
     p,c,state,stats,activated_ids,best)
   result.c1,result.c1_position=assessC1(c2_nodes,c2_indexes,c2_now,c2_future,c2_grid,c2_future_grid,
-    timing_bullets,p,c,state,stats,result.capture,candidates)
+    timing_bullets,p,c,state,stats,result.capture,candidates,enemies)
   followupPosition(result,p,c)
   state.bloom_observer_spirits = new_spirits
   return result

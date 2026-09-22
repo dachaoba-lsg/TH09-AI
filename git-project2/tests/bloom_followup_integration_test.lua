@@ -87,4 +87,37 @@ do
  check(o.capture.preferred_before_c1 and p.reason=='approach_capture' and p.intent.target_x<0,
   'unfunded C1 opportunity displaced viable lateral capture')
 end
-print('bloom_followup_integration_test: PASS ('..checks..' assertions; actual observer-policy-dodge, 16 roles)')
+-- Reimu: feed actual native-shaped damage facts through observer -> policy ->
+-- dodge. Requested Shift does not activate anything; only later enemy fields
+-- may unlock a proved C1 chain, with no change to the safe movement layer.
+do
+ local w=world({enemy('s1',0,220,true),enemy('s2',30,190,true)},{},100)
+ local p=w.player;p.character=0
+ local q=p.sensor;q.followupApiVersion=1;q.canPressZ=true;q.c1ActionActive=false
+ q.c1ActionAge=0;q.c1ActionDuration=50;q.chargeWarmupFrames=0
+ q.c1Profile={valid=true,limited=true,activeValid=true,activeShots={},actionDuration=50,
+  homingStateValid=true,homingTargetValid=true,homingTargetX=0,homingTargetY=220,shots={}}
+ for i,v in ipairs({{8,-80},{-8,-100},{16,-70},{-16,-110}}) do
+  q.c1Profile.shots[i]={supported=false,motionModel='reimu_c1_homing',spawnTick=0,
+   offsetX=v[1],offsetY=0,width=48,height=48,angle=v[2]*math.pi/180,speed=.5,damage=30,type=0}
+ end
+ for _,e in ipairs(w.enemies) do
+  e.sensor={apiVersion=1,valid=true,health=15,shotDamageable=true,shotCollisionEnabled=true,
+   shotDamageDivisor=4,damageModelLimited=false,hitX=e.x,hitY=e.y,hitWidth=8,hitHeight=8}
+ end
+ for i=1,30 do w.bullets[i]=bullet(i,0,210) end
+ local s,os,ds={fast_frames=100},{},{}
+ local o,plan,m=step(w,s,os,ds)
+ check(not o.c1.has_ignition and o.capture.preferred,'unactivated Reimu target acquired a direct C1 kill')
+ check(plan.phase=='prepare' and plan.intent.focus and m.focus and not plan.press_z,
+  'real pipeline did not prepare Reimu spirits before shooting')
+ for _=1,8 do o,plan,m=step(w,s,os,ds) end
+ check(not plan.press_z and not o.c1.has_ignition,'holding Shift alone invented target activation')
+ for _,e in ipairs(w.enemies) do e.isActivatedSpirit=true;e.sensor.shotDamageDivisor=2 end
+ o,plan,m=step(w,s,os,ds)
+ check(o.c1.damage_model_valid and o.c1.kill_count>0 and o.c1.chain_bullets==30,
+  'real pipeline lost native-qualified activated chain')
+ check(plan.target_level==1 and plan.press_z and not plan.intent.focus,
+  'proved activated Reimu chain did not unlock planned C1')
+end
+print('bloom_followup_integration_test: PASS ('..checks..' assertions; actual observer-policy-dodge, 16 roles and Reimu HP/activation)')

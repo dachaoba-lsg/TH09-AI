@@ -1,5 +1,8 @@
-DS-TH09-AI 3.3.0-test
+DS-TH09-AI 3.5.0-test
 
-Player-configurable movement changes, circular vision and attention.
-Default vision: radius 448/3 game units, shared by dodge and C target/resource decisions.
-CSV: 162 columns. Historical preset names remain compatible; no survival-time guarantee.
+Based on the accepted 3.4.0-test.
+Reimu C1 uses observed enemy HP/activation, nonpiercing shots and bounded homing prediction.
+Resource C1 revalidates its original ignition targets through charging.
+AI side=1 requires a matching side_key; missing/wrong key falls back to 2P.
+Public side_key is empty. Physical keyboard mapping and player ability settings are unchanged.
+CSV: 169 columns; the first 162 columns are preserved.

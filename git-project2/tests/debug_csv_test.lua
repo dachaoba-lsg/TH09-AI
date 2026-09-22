@@ -36,7 +36,7 @@ local function columns(line)
   return result
 end
 local header, first, second = columns(output[1]), columns(output[2]), columns(output[3])
-assert(#header == 109 and #first == 109 and #second == 109, 'CSV columns not aligned')
+assert(#header == 113 and #first == 113 and #second == 113, 'CSV columns not aligned')
 local map = {}; for index,name in ipairs(header) do map[name]=index end
 assert(tonumber(first[map.laser_count]) == 1, 'laser count missing from diagnostics')
 assert(tonumber(first[map.tracked_lasers]) == 0, 'first frame must not invent history')
@@ -70,4 +70,7 @@ for _,mask in ipairs(sent) do assert(math.floor(mask/2)%2 == 0, 'X key emitted')
 io.open, dofile = actual_open, actual_dofile
 assert(first[map.followup_confirmed] == 'false' and tonumber(first[map.followup_z_requests]) == 0,
   'empty scene invented a confirmed C2 follow-up')
- print('PASS: in-memory main-loop CSV integration, 109 matching columns, C2 resources/cadence/position/height/follow-up/route, no X')
+assert(first[map.c1_damage_model_valid]=='false' and tonumber(first[map.c1_kill_count])==0 and
+ tonumber(first[map.c1_contact_count])==0 and tonumber(first[map.c1_kill_delay])==0,
+ 'empty scene invented Reimu kill or damage proof')
+ print('PASS: in-memory main-loop CSV integration, 113 matching columns, C2 resources/cadence/position/height/follow-up/route/Reimu damage, no X')

@@ -34,7 +34,7 @@ REGS = (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX,
         UC_X86_REG_EFLAGS, UC_X86_REG_XMM0, UC_X86_REG_XMM1, UC_X86_REG_FPCW)
 
 
-def execute(image, base, plan, patched, prior_tables, helper_noop=False):
+def execute(image, base, plan, patched, prior_tables, helper_noop=False, enemy=False):
     cpu = Uc(UC_ARCH_X86, UC_MODE_32)
     cpu.mem_map(0, 0x1000)  # isolated x86 FS:[0] SEH chain, not host memory
     cpu.mem_map(base, (len(image) + 0xFFF) & ~0xFFF)
@@ -61,9 +61,17 @@ def execute(image, base, plan, patched, prior_tables, helper_noop=False):
         f(RAW + offset, value)
     for offset, value in ((0x14, 4.1), (0x18, 2.2), (0x24, 3.2)):
         f(FEATURE + offset, value)
+    if enemy:
+        put(OBJECT, 0); put(OBJECT + 4, 123); put(OBJECT + 8, RAW)
+        put(RAW + 0x337C, 0x00400049); put(RAW + 0x3380, 0x1040)
+        f(RAW + 0x2D74, 17.5); f(RAW + 0x2D78, 230.25)
+        f(RAW + 0x2D8C, 1); f(RAW + 0x2D90, 2)
+        f(RAW + 0x2D98, 3); f(RAW + 0x2D9C, 4)
     raw_before = bytes(cpu.mem_read(RAW, 0x30454))
     lua = [({"hitBodyRect": {"old": 1}, "hitBodyCircle": {}, "hitBodyForItem": {}}
             if prior_tables else {})]
+    if enemy and prior_tables:
+        lua = [{"hitBody": {"old": 1}}]
     api_calls, helpers = [], []
 
     def return_call(pop=0):
@@ -78,7 +86,7 @@ def execute(image, base, plan, patched, prior_tables, helper_noop=False):
         signed = lambda n: n if n < 0x80000000 else n - 0x100000000
         if address == HELPER:
             assert (arg(0), arg(1)) == (L, OBJECT)
-            assert len(lua) == 1 and "speedSlow" in lua[-1]
+            assert len(lua) == 1 and ("isSpirit" if enemy else "speedSlow") in lua[-1]
             helpers.append((arg(0), arg(1)))
             if not helper_noop:
                 lua[-1]["sensor"] = {"apiVersion": 1, "valid": True}
@@ -89,7 +97,7 @@ def execute(image, base, plan, patched, prior_tables, helper_noop=False):
                 machine.reg_write(UC_X86_REG_XMM1, 0x8877665544332211)
                 machine.reg_write(UC_X86_REG_FPCW, 0x077F)
             return_call()
-        elif rva in (0x1D8C0, 0x1D8F0, 0x1D920):
+        elif rva in (0x1D8C0, 0x1D8F0, 0x1D920, 0x1D990):
             # thiscall returns shared_ptr into caller-owned hidden result.
             assert machine.reg_read(UC_X86_REG_ECX) == OBJECT
             result = arg(0)
@@ -100,11 +108,12 @@ def execute(image, base, plan, patched, prior_tables, helper_noop=False):
             assert machine.reg_read(UC_X86_REG_ECX) == L
             lua[-1]["body_exported"] = True
             return_call()
-        elif rva in (0x1860, 0x17E0, 0x1C60, 0x1A40, 0x13E0, 0x1200, 0x1B50, 0x13B0):
+        elif rva in (0x1860, 0x17E0, 0x19D0, 0x1C60, 0x1A40, 0x13E0, 0x1200, 0x1B50, 0x13B0):
             assert arg(0) == L, hex(address)
             api_calls.append(rva)
             if rva == 0x1860: lua.append(cstring(arg(1)))
             elif rva == 0x17E0: lua.append(struct.unpack("<d", machine.mem_read(sp + 8, 8))[0])
+            elif rva == 0x19D0: lua.append(bool(arg(1)))
             elif rva == 0x1C60:
                 target = lua[signed(arg(1))]
                 value, key = lua.pop(), lua.pop()
@@ -134,13 +143,17 @@ def execute(image, base, plan, patched, prior_tables, helper_noop=False):
     cpu.reg_write(UC_X86_REG_XMM0, 0x1234123412341234)
     cpu.reg_write(UC_X86_REG_XMM1, 0x11112222333344445555666677778888)
     put(STACK, STOP); put(0, 0xFFFFFFFF)
-    cpu.emu_start(base + 0x1E100, STOP, count=100000)
+    cpu.emu_start(base + (0x1E630 if enemy else 0x1E100), STOP, count=100000)
     assert len(lua) == 1
     assert u32(0) == 0xFFFFFFFF, "upstream SEH chain restored"
     assert raw_before == bytes(cpu.mem_read(RAW, 0x30454)), "no game player writes"
     assert len(helpers) == int(patched)
-    assert abs(lua[0]["speedFast"] - 4.1) < 1e-6 and lua[0]["character"] == 12
-    assert lua[0]["spellPoint"] == 420000 and lua[0]["x"] == 17.5
+    if enemy:
+        assert lua[0]["id"] == 123 and lua[0]["isSpirit"] and lua[0]["isActivatedSpirit"]
+        assert lua[0]["x"] == 17.5 and lua[0]["vx"] == 3 and lua[0]["vy"] == 4
+    else:
+        assert abs(lua[0]["speedFast"] - 4.1) < 1e-6 and lua[0]["character"] == 12
+        assert lua[0]["spellPoint"] == 420000 and lua[0]["x"] == 17.5
     return lua[0], tuple(cpu.reg_read(r) for r in REGS), api_calls
 
 
@@ -152,17 +165,17 @@ def main():
     assert hashlib.sha256(args.inject_dll.read_bytes()).hexdigest() == SHA
     subprocess.run([str(args.plan_exe)], check=True)
     cases = 0
-    for base in (0x10000000, 0x14000000, 0x65000000):
+    for enemy, base in ((e, b) for e in (False, True) for b in (0x10000000, 0x14000000, 0x65000000)):
         pe = pefile.PE(str(args.inject_dll))
         pe.relocate_image(base)
         image = pe.get_memory_mapped_image()
-        dump = subprocess.check_output([str(args.plan_exe), "--dump", hex(base), hex(GATE), hex(HELPER)], text=True)
+        dump = subprocess.check_output([str(args.plan_exe), "--dump-enemy" if enemy else "--dump", hex(base), hex(GATE), hex(HELPER)], text=True)
         plan = {kind: (int(address, 16), bytes.fromhex(code))
                 for kind, address, code in (line.split() for line in dump.splitlines())}
         for prior in (False, True):
-            original, original_regs, original_calls = execute(image, base, plan, False, prior)
-            reference, reference_regs, reference_calls = execute(image, base, plan, True, prior, helper_noop=True)
-            patched, patched_regs, patched_calls = execute(image, base, plan, True, prior)
+            original, original_regs, original_calls = execute(image, base, plan, False, prior, enemy=enemy)
+            reference, reference_regs, reference_calls = execute(image, base, plan, True, prior, helper_noop=True, enemy=enemy)
+            patched, patched_regs, patched_calls = execute(image, base, plan, True, prior, enemy=enemy)
             sensor = patched.pop("sensor")
             assert sensor == {"apiVersion": 1, "valid": True}
             assert original == patched and original_calls == patched_calls

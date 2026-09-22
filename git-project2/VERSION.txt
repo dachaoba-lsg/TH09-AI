@@ -1,1 +1,63 @@
-TH09-AI 2.0.6
+TH09-AI 2.0.7
+
+Reimu C1: readonly target HP, damage eligibility, defense multiplier and collision bounds; four non-piercing 30-damage charms; homing begins after 40 integer Timer units
+C1 yield: estimate defeat, not coverage alone; conservatively budget resources at impact time; unactivated spirits first use selective Shift capture and ordinary shots
+Compatibility: complete Lua/native upgrade required; C2 260/200/480 cadence and established safe dodge unchanged
+
+Author: 圣诞老人的驯鹿-xunlu
+Release: Reimu C1 damage-aware bloom test package; final Lua and native offline checks passed; package/rebuild records accompany delivery; user live acceptance pending
+Strategy: spatial fairy/spirit/erasable-bullet chains; deliberate C1/C2 only; resource-qualified C2 and C1 coverage/yield comparison
+Removed: random C1-C4 selection and the 500000 Spell Point firing lock
+Movement: Y >= 150 policy limit (roughly below top third), physical y=16..432 unchanged; no ordinary-shot/C1 upward chase; limited spirit capture; original dodge geometry retained
+C2 position: actual release observation separate from at most 9 lower/side candidates; reachable ignition seed required; direct/contested clears penalized
+Position search: full nine-candidate search every 6 observe calls by default; cache coordinates only; actual/cached-position yields reevaluated each callback; invalid/no-seed cache triggers search; dodge and actual resource evaluation not throttled
+Early C2 ratio: net chain bullets / (net + direct + contested) >= 0.35 by default; otherwise prefer ordinary shots, C1 or waiting
+Capture: independent chain/white-bullet valuation; bounded fast lateral approach before selective Shift; retained-chain lock permits later capture
+C1 coverage: readonly selector-1 templates and current owned-shot AABBs; current hits require damageReady; partial/custom callbacks explicitly limited; existing action remainder cannot fund a fresh C1
+Post-C2 Z: charge-reset/live-effect association before follow-up; separate request count, not an extra confirmed C1; input and charge gates remain distinct
+Protected capture: fast interval normally 72; confirmed C2 with enough live protection may use 24; actual Shift budget 40/180 and per-window max 32 retained
+Protected route: real state3 only; original short path plus held-endpoint check to expiry+4, bounded at 60 at normal timeScale; no circle-based collision exemption
+Shape timing: selective early spirit capture preserves high-speed fairy supply and the retained chain; ignite before white bullets leak through
+Bounded hold: C2 charge 200..299 and C1 100..199 may wait only for a clearly better future net chain; waiting <=24 updates, whole preparation <=90 updates, not a fixed 0.4s delay
+Charge safety: release C2 if charged + chargeSpeed >= 300 regardless of current Max; end C1 waiting before 200
+Deadline priority: independent C2 cadence overrides ratio/position/shape waiting; C1 never resets it; no waiting into C3
+Scarce resources: may wait before cadence preparation even at risk of a hit; deadline can bypass resource gates; no danger-triggered emergency C2 or X
+C2 cadence: normal 480 game Timer units; rich chains may shorten the next C2 target to 260 or 200 units; reset only by C2 release request; C1 does not postpone C2
+Any-C cadence: reset by any C release request; energy below 200 but at least 100 schedules C1 at its 480-unit deadline
+Cadence lead: initial held-Z warm-up (up to 11) plus remaining charge / speed plus 2 units; begin before expiry
+Cadence exceptions: action gates, hits and insufficient energy may delay release; overdue debt retained; cut-ins/time stops freeze cadence clocks
+C2 ignition: can directly destroy fairies and unactivated spirits; independent of ordinary-shot eligibility/alignment
+C2 direct clear: white bullets swallowed by its circle provide neither recharge nor return bullets
+C2 yield: count potential fairy/spirit explosion conversions; contested-envelope bullets are conservatively unbudgeted, not physically incapable of conversion
+C2 common circle: statically verified fixed release point, initial radius 0, growth 4 per update, lifetime 48
+C2 planning: 188 ignition reach and 192 contested envelope; no exact circle/blast race simulation; conservative yield can underestimate reality
+Recharge: a refill to 2/3 is an observed outcome, not an ignition/energy gate; heuristic geometry/race estimates and feedback cannot guarantee another C2
+Correction: 2.0.0 reused ordinary-shot ignition and overcounted nearby erasable-bullet yield
+Post-C2 route: confirmed C2 protection prefers a low landing band; after expiry, observed lower-field pressure may move the target back to mid field; real dodge geometry remains authoritative
+Diagnostics: CSV retains the prior 104 columns and adds post_c2_phase, post_c2_age, post_c2_target_y, cadence_limit and bloom_cadence (109 columns)
+Upgrade: use the full 2.0.7 Lua/native package, including bloom.lua and bloom_observer.lua; retain the 2.0.6 and older ZIPs separately
+
+Runtime: ka_ai_duka 1.7 (unmodified upstream binaries)
+Native compatibility: existing native version markers and player.sensor apiVersion 1 retained; followupApiVersion 1 readonly extension added
+Native launcher: checked in-memory input isolation
+Native support: window recreation recovery and edge/corner resizing; optional 1P practice protection
+Laser sensor: checked upstream export correction; original game physics and disk DLL unchanged
+Poison/state sensing: retained nonlethal slowing terrain and protection-expiry awareness; no 2P HP or protection modification
+State contract: apiVersion 1 valid snapshot required; invalid/missing snapshots release all AI input and report an error
+Supported game: Japanese TH09 v1.50a
+AI side: 2P
+Charge compatibility: 2P Option Charge Type must be Slow; 1P setting untouched
+Launcher paths: resolve nearest ancestor containing th09.exe; regenerate paths after relocation
+Battle limit: launcher-settings.json top-level seconds, default 600; integer 0-86400, 0 unlimited
+Timing: AI battle callbacks / 60; pause-menu scheduling not separately verified; stop remains latched until next battle
+Practice: 1P no-damage preserves exact HP; invincible takes precedence; both default false
+Unchanged: no X, timing/input isolation/practice/window rules; no game spawn, energy, poison or physics edits
+Diagnostics baseline: 2.0.6 has 109 CSV columns; requests and estimated yield are not confirmed kills/returns; current schema verification belongs to final delivery record
+Known limitations: custom C1 callbacks and future active-shot motion may be unmodeled; heuristic chains, circle/blast races, recharge and bounded endpoint predictions; no guaranteed survival
+Baseline feedback: user confirmed 0.1.9 poison tests and accepted 2.0.2; neither is all-character 2.0.5 acceptance
+Acceptance: 2.0.7 final 21 Lua suites and native offline checks passed; package, source-rebuild and hash records belong to final delivery; user live acceptance pending; microbenchmarks do not guarantee FPS
+Feedback: video plus ai/ai_debug.csv and runtime/native-window.log; packaging does not replace installed games
+
+2.0.7 verification: final 21 Lua suites PASS; Reimu observer/policy/integration 406/203/113 checks; native 61074 checks; actual SHT 61/43 checks; x86 export ABI 12 scenarios; four suspended initialization configurations PASS
+2.0.7 CSV: 113 columns; c1_damage_model_valid, c1_kill_count, c1_contact_count, c1_kill_delay added to historical 109; delay includes charging, warm-up and flight from now; zero does not guarantee impact
+C1 estimates: predicted defeats/contacts, not observed kills; one explosion per entity; insufficient damage retains spirit capture/ordinary shots; invalid Reimu model never borrows ordinary-shot scores for fresh C1 except deadline/already-charged physical release

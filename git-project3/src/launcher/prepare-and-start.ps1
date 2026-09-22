@@ -9,7 +9,14 @@ $aiScript = Join-Path $packageRoot 'ai\main.lua'
 $runtimeIni = Join-Path $runtimeRoot 'ka_ai_duka.ini'
 $aiRuntimeSettings = Join-Path $packageRoot 'ai\runtime-settings.lua'
 $inputHelper = Join-Path $packageRoot 'prepare-input.ps1'
-$settings = ConvertFrom-Json ([IO.File]::ReadAllText((Join-Path $packageRoot 'launcher-settings.json')))
+try {
+  $settings = ConvertFrom-Json ([IO.File]::ReadAllText((Join-Path $packageRoot 'launcher-settings.json')))
+} catch {
+  # Windows PowerShell can include an unquoted JSON value in its parser error.
+  # Keep configuration values, including side_key, out of the console/log.
+  Write-Host '无法读取launcher-settings.json，请检查文件和JSON语法；字符串必须使用双引号。' -ForegroundColor Red
+  exit 14
+}
 
 function Stop-WithMessage([string] $message, [int] $exitCode) {
   Write-Host $message -ForegroundColor Red
@@ -22,6 +29,22 @@ function Get-Sha256Hex([string] $path) {
     try { return [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '') }
     finally { $sha256.Dispose() }
   } finally { $stream.Dispose() }
+}
+
+function Test-AiSideKey($candidate) {
+  # This convenience gate stores only a digest. Never emit the candidate or
+  # forward it into the generated native/Lua settings.
+  if ($candidate -isnot [string]) { return $false }
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try {
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    $digest = [BitConverter]::ToString($sha256.ComputeHash($utf8.GetBytes($candidate))).Replace('-', '').ToLowerInvariant()
+    return $digest -ceq '82410b1bd4d8eeee2897f9c69b45a88bddab8bafa29881218f42c8c0b628c19e'
+  } catch {
+    return $false
+  } finally {
+    $sha256.Dispose()
+  }
 }
 
 function Resolve-GameRoot {
@@ -98,12 +121,20 @@ $aiNumbers = [ordered]@{
   attention_capacity = @(1, 256); attention_recovery_per_second = @(0.1, 256)
 }
 $aiDifficulty = 'human200'
+$aiSide = 2
 $aiOverrides = [ordered]@{}
 $aiEnabled = $null
 $aiDebugLog = $null
 if ($null -ne $settings.ai) {
   if ($settings.ai -isnot [pscustomobject]) {
     Stop-WithMessage 'ai 必须是JSON对象，例如 "ai": { "difficulty": "human" }。' 14
+  }
+  if ($settings.ai.PSObject.Properties.Name -contains 'side') {
+    $value = $settings.ai.side
+    if (($value -isnot [int] -and $value -isnot [long]) -or $value -notin @(1, 2)) {
+      Stop-WithMessage 'ai.side 必须是整数 1 或 2，不要加引号；1=AI接管1P，2=AI接管2P。' 14
+    }
+    $aiSide = [int]$value
   }
   if ($settings.ai.PSObject.Properties.Name -contains 'difficulty') {
     $value = $settings.ai.difficulty
@@ -144,6 +175,25 @@ if ($null -ne $settings.ai) {
     }
   }
 }
+# Resolve the effective side before deriving the human side, practice gates,
+# script bindings, or native INI. Preserve the user's saved request and key.
+if ($aiSide -eq 1 -and -not (Test-AiSideKey $settings.ai.side_key)) {
+  Write-Host '1P接管key未通过，本次使用2P AI；已保存的设置保持不变。' -ForegroundColor Yellow
+  $aiSide = 2
+}
+# Keep the keyboard layout fixed. Only the script binding and the selected
+# native SendKeys isolation change sides. Legacy practice switches name 1P;
+# they must never grant protection to the AI when it takes that side.
+$humanSide = 3 - $aiSide
+if ($aiSide -eq 1 -and ($noDamage -or $invincible)) {
+  Write-Host 'AI接管1P：本次禁用1P练习免伤/无敌，保留JSON中的原设置；不会转移给2P。' -ForegroundColor Yellow
+  $noDamage = 0
+  $invincible = 0
+}
+$player1Enabled = if ($aiSide -eq 1) { 'true' } else { 'false' }
+$player2Enabled = if ($aiSide -eq 2) { 'true' } else { 'false' }
+$player1Script = if ($aiSide -eq 1) { $aiScript } else { '' }
+$player2Script = if ($aiSide -eq 2) { $aiScript } else { '' }
 # Original upstream runtime uses ANSI file paths.
 $ini = @"
 [common]
@@ -151,11 +201,11 @@ exe_path=$gameExe
 snapshot=false
 run_while_replay=false
 [1P]
-enabled=false
-script_path=
+enabled=$player1Enabled
+script_path=$player1Script
 [2P]
-enabled=true
-script_path=$aiScript
+enabled=$player2Enabled
+script_path=$player2Script
 [practice]
 player1_no_damage=$noDamage
 player1_invincible=$invincible
@@ -192,7 +242,8 @@ if ($PrepareOnly) {
   exit 0
 }
 & $inputHelper -GameRoot $gameRoot
-Write-Host '正在启动TH09：1P玩家，2P选人使用WASD/J/K；开战后2P输入完全由AI控制。' -ForegroundColor Green
+Write-Host "正在启动TH09：AI接管 ${aiSide}P，玩家操作 ${humanSide}P；开战后仅AI侧输入由AI独占。" -ForegroundColor Green
+Write-Host "键位保持：1P方向键/Z/X/Shift，2P WASD/J/K/L；请将 ${aiSide}P 的 Charge Type 设为 Slow。"
 Write-Host "AI操作时限：$seconds 秒（0=不限时）；1P不掉血=$noDamage，无敌=$invincible。"
 Write-Host "AI注意力预设：$aiDifficulty（旧挡位名保留，暂停按存活秒数标定；双击 set-difficulty.cmd 可设置注意力、视野和避弹变向上限）"
 Push-Location -LiteralPath $runtimeRoot

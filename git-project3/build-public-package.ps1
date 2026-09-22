@@ -1,5 +1,5 @@
 ﻿param(
-    [string] $Version = '3.3.0-test',
+    [string] $Version = '3.5.0-test',
     [switch] $Overwrite,
     [string] $PackageName = 'DS-TH09-AI',
     [string] $ZipBase = ''
@@ -8,7 +8,9 @@ $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid package version.' }
 $project = [IO.Path]::GetFullPath($PSScriptRoot)
 $dist = Join-Path $project 'dist\TH09-AI'
+if ($PackageName -notmatch '^[A-Za-z0-9_-]+$') { throw 'Invalid package name.' }
 if (-not $ZipBase) { $ZipBase = $PackageName }
+if ($ZipBase -notmatch '^[A-Za-z0-9_-]+$') { throw 'Invalid ZIP base name.' }
 $zipPath = Join-Path $project ('dist\' + $ZipBase + '-v' + $Version + '.zip')
 if ([IO.File]::Exists($zipPath) -and -not $Overwrite) {
     throw "ZIP already exists: $zipPath. Choose another -Version or explicitly pass -Overwrite."
@@ -59,9 +61,11 @@ foreach ($required in @('src\ai\main.lua', 'src\ai\config.lua', 'src\ai\dodge.lu
     'src\launcher\prepare-and-start.ps1', 'src\launcher\prepare-input.ps1',
     'src\native\launcher.c', 'src\native\window_support.c', 'src\native\window_resize.c',
     'src\native\window_resize.h', 'src\native\window_resize_selftest.c', 'src\native\input_patches.h',
+    'src\native\ai_side_config.h', 'src\native\ai_input_patches.h',
     'src\native\practice_patches.c', 'src\native\practice_patches.h',
     'src\native\laser_sensor.c', 'src\native\laser_sensor.h',
     'src\native\laser_sensor_selftest.c', 'src\native\player_sensor.c',
+    'src\native\enemy_sensor.c', 'src\native\enemy_sensor.h', 'src\native\enemy_sensor_selftest.c',
     'src\native\player_sensor.h', 'src\native\player_sensor_selftest.c', 'src\native\README.md')) {
     if (-not $files.Contains($required)) { throw "Missing required source file: $required" }
 }
@@ -87,8 +91,7 @@ foreach ($relative in $files) {
     $target = Join-Path $stageRoot $relative
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
     $source = Join-Path $project $relative
-    # A release source/ folder has its own standalone rebuild workflow.
-    # Do not copy the Git README's links to scripts/package/tests into it.
+    # Release source has its own standalone rebuild workflow.
     if ($relative -eq 'README.md') { $source = Join-Path $project 'PUBLIC-SOURCE-BUILD.md' }
     if ([IO.Path]::GetExtension($relative) -in @('.ps1', '.cmd')) {
         $content = [IO.File]::ReadAllText($source) -replace '\r?\n', "`r`n"

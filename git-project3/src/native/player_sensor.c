@@ -104,7 +104,7 @@ static BOOL collect_c1(uint32_t feature,Th09PlayerSensorReadFn rd,void *ctx,Th09
         if(!bounded(f32(record+4),4096)||!bounded(f32(record+8),4096)||
            !bounded(f32(record+0xc),4096)||!bounded(f32(record+0x10),4096)||
            !bounded(f32(record+0x14),1000)||!bounded(f32(record+0x18),1000))return FALSE;
-        shot=&s->c1_shots[s->c1_count++];shot->template_address=address;
+        shot=&s->c1_shots[s->c1_count++];shot->template_address=address;shot->template_index=j+1;
         shot->spawn_tick=tick;shot->offset_x=f32(record+4);shot->offset_y=f32(record+8);
         shot->width=f32(record+0xc);shot->height=f32(record+0x10);
         shot->angle=f32(record+0x14);shot->speed=f32(record+0x18);
@@ -112,6 +112,14 @@ static BOOL collect_c1(uint32_t feature,Th09PlayerSensorReadFn rd,void *ctx,Th09
         shot->piercing=shot->type==2||shot->type==3;
         shot->supported=!u32(record+0x28)&&!u32(record+0x2c)&&!u32(record+0x30)&&!u32(record+0x34)
             &&shot->type>=0&&shot->type<=3&&shot->damage>0&&shot->width>0&&shot->height>0;
+        /* Reimu's verified 4415E0 updater is linear before integer age 40,
+         * then uses the separately versioned homing kernel. Unknown callbacks
+         * never borrow this model; the Lua forecast remains bounded. */
+        if(s->character==0&&u32(record+0x2c)==0x4415e0u&&!u32(record+0x28)&&
+           !u32(record+0x30)&&!u32(record+0x34)&&i16(record+0x20)==0&&shot->type==0&&
+           shot->damage==30&&shot->width==48&&shot->height==48&&tick==0){
+            shot->supported=1;shot->linear_until_tick=40;shot->movement_model_version=1;
+        }
         if(!shot->supported)s->c1_limited=1;
     }
     return FALSE;
@@ -136,13 +144,21 @@ static BOOL collect_c1_active(uint32_t raw,Th09PlayerSensorReadFn rd,void *ctx,T
            !bounded(f32(tail+0x28),1000000))return FALSE;
         if(u16(tail+0x32)!=1)return FALSE; /* snapshot changed during read */
         shot=&s->c1_active[s->c1_active_count++];shot->slot_id=slot+1;
+        shot->template_index=j+1;shot->linear_until_tick=s->c1_shots[j].linear_until_tick;
+        shot->movement_model_version=s->c1_shots[j].movement_model_version;
         shot->x=f32(position);shot->y=f32(position+4);shot->width=f32(tail);shot->height=f32(tail+4);
         shot->vx=f32(tail+0xc);shot->vy=f32(tail+0x10);shot->age=f32(tail+0x28);
+        shot->speed=f32(tail+0x1c);shot->previous_age_integer=i32(tail+0x24);shot->age_integer=i32(tail+0x2c);
         shot->type=i16(tail+0x34);shot->damage=i16(tail+0x30);
         shot->piercing=shot->type==2||shot->type==3;
         /* Current AABB is authoritative even for custom movement. An unknown
          * hit callback can reject it, so never mark that geometry supported. */
         shot->supported=!u32(tail+0x4c)&&shot->type>=0&&shot->type<=3&&shot->damage>0&&shot->width>0&&shot->height>0;
+        if(shot->movement_model_version&&(u32(tail+0x44)!=0x4415e0u||!bounded(shot->speed,1000)||
+           shot->speed<=0||shot->age_integer<0||shot->age_integer>1000000||
+           shot->previous_age_integer < -1000000||shot->previous_age_integer>1000000)){
+            shot->supported=0;shot->movement_model_version=0;
+        }
         /* 41FDAA..41FDC1 skips type-2 damage on odd integer shot-timer ticks.
          * Geometry is still observable then, but is not a current damage hit. */
         shot->damage_ready=shot->type!=2 || (u32(tail+0x2c)&1u)==0;
@@ -206,6 +222,8 @@ BOOL Th09PlayerSensorCollect(uint32_t raw,Th09PlayerSensorReadFn rd,void *ctx,Th
     s->state=i32(head);side=u32(head+8);
     if(side>1 || s->state<0 || s->state>5)return FALSE;
     if(!rd(0x4a7d94u+side*0x38u,tiny,4,ctx) || u32(tiny)!=raw)return FALSE;
+    s->character=-1;
+    if(rd(0x4a7db0u+side*0x38u,tiny,4,ctx)&&u32(tiny)<16u)s->character=(int)u32(tiny);
     ptr=u32(tail);
     if(!rd(ptr,feature,sizeof(feature),ctx))return FALSE;
     x=f32(pos+0x14);y=f32(pos+0x18);flags=u32(pos+0xc);
@@ -327,13 +345,19 @@ void Th09PlayerSensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th
         a->set_table(L,-3);
     }
     a->set_table(L,-3);
-    a->push_string(L,"c1Profile");a->create_table(L,0,6);
+    a->push_string(L,"c1Profile");a->create_table(L,0,9);
     boolean(L,a,"valid",s->valid&&s->c1_valid);boolean(L,a,"limited",!s->valid||s->c1_limited);
+    number(L,a,"character",s->valid?s->character:-1);
+    number(L,a,"damageModelVersion",s->valid&&s->character==0?1:0);
+    number(L,a,"movementModelVersion",s->valid&&s->character==0?1:0);
+    boolean(L,a,"futureLimited",s->valid&&s->character==0);
     number(L,a,"actionDuration",s->valid?s->c1_action_duration:0);
     a->push_string(L,"shots");a->create_table(L,s->valid&&s->c1_valid?s->c1_count:0,0);
     if(s->valid&&s->c1_valid)for(i=0;i<s->c1_count;i++){
         const Th09C1Shot *v=&s->c1_shots[i];
-        a->push_number(L,i+1);a->create_table(L,0,12);
+        a->push_number(L,i+1);a->create_table(L,0,15);
+        number(L,a,"templateIndex",v->template_index);number(L,a,"linearUntilTick",v->linear_until_tick);
+        number(L,a,"movementModelVersion",v->movement_model_version);
         number(L,a,"spawnTick",v->spawn_tick);number(L,a,"offsetX",v->offset_x);number(L,a,"offsetY",v->offset_y);
         number(L,a,"width",v->width);number(L,a,"height",v->height);number(L,a,"angle",v->angle);
         number(L,a,"speed",v->speed);number(L,a,"damage",v->damage);number(L,a,"type",v->type);
@@ -345,7 +369,10 @@ void Th09PlayerSensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th
     a->push_string(L,"activeShots");a->create_table(L,s->valid&&s->c1_active_valid?s->c1_active_count:0,0);
     if(s->valid&&s->c1_active_valid)for(i=0;i<s->c1_active_count;i++){
         const Th09C1ActiveShot *v=&s->c1_active[i];
-        a->push_number(L,i+1);a->create_table(L,0,14);
+        a->push_number(L,i+1);a->create_table(L,0,20);
+        number(L,a,"templateIndex",v->template_index);number(L,a,"linearUntilTick",v->linear_until_tick);
+        number(L,a,"movementModelVersion",v->movement_model_version);number(L,a,"speed",v->speed);
+        number(L,a,"ageInteger",v->age_integer);number(L,a,"previousAgeInteger",v->previous_age_integer);
         number(L,a,"slotId",v->slot_id);number(L,a,"x",v->x);number(L,a,"y",v->y);
         number(L,a,"width",v->width);number(L,a,"height",v->height);
         number(L,a,"vx",v->vx);number(L,a,"vy",v->vy);number(L,a,"age",v->age);
@@ -439,7 +466,10 @@ BOOL Th09PlayerSensorInstall(Th09PlayerSensorLogFn logfn){
         {0x41C8E0,0x110,0xD13CD57Bu},{0x41CF30,0x6C,0x5A94CA68u},
         {0x41CFE0,0x139,0x478B14ECu},{0x41BBE0,0xAC,0x1D88C1E9u},
         {0x41F2C0,0x37,0x2A1222A2u},{0x41F350,0x22C,0x93A0EF0Bu},
-        {0x41F580,0xFB,0xFFA2C9C3u},{0x41FCD0,0x20B,0xDA96AD60u}};
+        {0x41F580,0xFB,0xFFA2C9C3u},{0x41FCD0,0x20B,0xDA96AD60u},
+        {0x4415E0,0x1D7,0x25B43193u},{0x40F810,0x11,0xBFE7CA57u},
+        {0x4915BC,0x8,0xE5F8CFF5u},{0x491028,0x4,0x1C58782Bu},
+        {0x48E2A4,0x4,0x1B587698u},{0x48E32C,0x4,0x4AE5A562u}};
     unsigned char original[TH09_PLAYER_FIELDS_SIZE],*code=NULL,*target;
     HMODULE module;uint32_t base,value;size_t i;DWORD old,unused;
     Th09PlayerSensorPlan plan;BOOL success=FALSE;const char *reason="already attempted or wrong architecture";

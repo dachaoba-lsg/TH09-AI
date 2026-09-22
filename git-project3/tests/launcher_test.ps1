@@ -190,7 +190,9 @@ try {
         Assert-Test (@($runtimeBytes | Where-Object { $_ -gt 127 }).Count -eq 0) ("$CaseName runtime settings are plain ASCII without BOM")
         $runtimeText = [Text.Encoding]::ASCII.GetString($runtimeBytes)
         $runtimeText = [regex]::Replace($runtimeText, '(?m)^--[^\r\n]*(?:\r?\n|\z)', '')
-        Assert-Test ($runtimeText -match ('\Areturn\s*\{\s*seconds\s*=\s*' + $ExpectedSeconds + '\s*\}\s*\z')) ("$CaseName writes exact seconds=$ExpectedSeconds")
+        # Since 3.1 the generated table also carries AI defaults. These fixtures
+        # omit ai, so require the exact default rather than the pre-3.1 shape.
+        Assert-Test ($runtimeText -match ('\Areturn\s*\{\s*seconds\s*=\s*' + $ExpectedSeconds + '\s*,\s*ai\s*=\s*\{\s*difficulty\s*=\s*"human200"\s*\}\s*\}\s*\z')) ("$CaseName writes exact seconds=$ExpectedSeconds and default AI settings")
     }
     function Assert-PracticeSettings([object] $Settings, [int] $NoDamage, [int] $Invincible, [string] $CaseName) {
         $ini = Invoke-PracticeFixture $Settings 0 $CaseName

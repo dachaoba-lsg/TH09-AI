@@ -26,13 +26,14 @@ typedef struct {
     float x,y,radius,growth;
 } Th09CommonWave;
 typedef struct {
-    int spawn_tick,damage,type,supported,piercing;
+    int spawn_tick,damage,type,supported,piercing,template_index,linear_until_tick,movement_model_version;
     float offset_x,offset_y,width,height,angle,speed;
     uint32_t template_address;
 } Th09C1Shot;
 typedef struct {
-    int slot_id,type,damage,supported,piercing,damage_ready;
-    float x,y,width,height,vx,vy,age;
+    int slot_id,type,damage,supported,piercing,damage_ready,template_index,linear_until_tick,movement_model_version;
+    int age_integer,previous_age_integer;
+    float x,y,width,height,vx,vy,age,speed;
 } Th09C1ActiveShot;
 typedef struct {
     int valid,state,life;
@@ -40,7 +41,7 @@ typedef struct {
     unsigned int spell_point,combo;
 } Th09OpponentSnapshot;
 typedef struct {
-    int valid,state,can_charge,cut_in,movement_enabled,cloud_count;
+    int valid,state,can_charge,cut_in,movement_enabled,cloud_count,character;
     int can_press_z,c1_action_active,waves_valid,wave_count;
     int c1_valid,c1_limited,c1_count,c1_active_valid,c1_active_count;
     float base_x,base_y,move_x,move_y,protection,charge_block,charge_warmup,time_scale;

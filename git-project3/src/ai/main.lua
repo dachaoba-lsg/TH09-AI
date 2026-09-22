@@ -131,6 +131,8 @@ local columns = {
   "vision_visible_enemies", "vision_hidden_enemies", "vision_visible_ex", "vision_hidden_ex",
   "vision_visible_poison", "vision_hidden_poison", "move_change_budget",
   "attention_capacity_config", "attention_recovery_config", "attention_enabled",
+  "c1_release_delay_updates", "c1_kill_model", "c1_combat_valid", "c1_hp_rejected",
+  "c1_blocked_shots", "c1_locked_seed_count", "c1_seed_wait_age",
 }
 -- The game host runs Lua with a stripped standard environment (print is nil in
 -- ka_ai_duka), so every optional global is probed before use: an unavailable
@@ -179,9 +181,11 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
     or plan.phase ~= state.last_debug_phase or state.hit == true or state.round_start == true
     or state.bloom.c2_reserve_active ~= state.last_debug_reserve
     or state.bloom.c2_reserve_reason ~= state.last_debug_reserve_reason
+    or state.bloom.c1_lost_age ~= state.last_debug_c1_lost_age
   state.last_debug_phase = plan.phase
   state.last_debug_reserve, state.last_debug_reserve_reason = state.bloom.c2_reserve_active,
     state.bloom.c2_reserve_reason
+  state.last_debug_c1_lost_age = state.bloom.c1_lost_age
   if state.frame % config.debug_log_interval_frames ~= 0 and not event then return end
   local sensor, counts = player.sensor, obs.counts or {}
   local vision = state.vision or {}
@@ -189,6 +193,8 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
   local chain_timing, c2_timing = obs.timing or {}, c2.timing or {}
   local position, intent = obs.c2_position or {}, plan.intent or {}
   local capture, c1 = obs.capture or {}, obs.c1 or {}
+  local c1_locked = 0
+  for _ in pairs(state.bloom.c1_seed_ids or {}) do c1_locked = c1_locked + 1 end
   local total = (c2.chain_bullets or 0) + (c2.direct_bullets or 0) + (c2.contested_bullets or 0)
   local values = {
     state.frame, player.x, player.y, player.life, player.spellPoint, player.combo,
@@ -250,6 +256,8 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
     vision.visible_poison or 0, vision.hidden_poison or 0,
     config.dodge.move_change_budget, config.dodge.attention.tracked_threat,
     config.dodge.attention.threat_per_second, config.dodge.attention.enabled ~= false,
+    c1.release_delay_updates or 0, c1.kill_model == true, c1.combat_valid == true,
+    c1.hp_rejected or 0, c1.blocked_shots or 0, c1_locked, state.bloom.c1_lost_age or 0,
   }
   for index = 1, #columns do values[index] = tostring(values[index] == nil and "" or values[index]) end
   debug_file:write(table.concat(values, ",") .. "\n")
@@ -363,7 +371,7 @@ function main()
     resetBloomPlanning()
     state.observer = {}
     if not state.charge_mode_fault_reported then
-      log("TH09-AI: unsupported 2P Charge Type. Select Slow (hold Z to charge, Shift for slow movement) in the game options; AI input released.")
+      log("TH09-AI: unsupported " .. tostring(player_side) .. "P Charge Type. Select Slow (hold Z to charge, Shift for slow movement) in the game options; AI input released.")
       state.charge_mode_fault_reported = true
     end
     return
@@ -400,6 +408,8 @@ function main()
   visible_side, state.vision = dodge.perceive(game_side, config.dodge)
   state.observer.lock_ids = (state.bloom.target_level or (state.bloom.shot_remaining or 0) > 0)
     and state.bloom.attack_ids or state.bloom.prepare_ids
+  state.observer.c1_seed_ids = state.bloom.target_level == 1 and not state.bloom.cadence_charge
+    and state.bloom.c1_seed_ids or nil
   local observer_cfg = {}
   for k, v in pairs(config.bloom.observer) do observer_cfg[k] = v end
   observer_cfg.release_min_y = config.bloom.min_y
@@ -409,6 +419,13 @@ function main()
   local warmup = player.sensor.chargeWarmupFrames or 10
   local eta = remaining / player.chargeSpeed + warmup
   observer_cfg.prediction_frames = math.max(12, math.min(60, eta))
+  -- Prospective C1 bullets cannot spawn before the remaining warm-up and
+  -- charge-to-100 updates. This delay is independent of the C2 shape sample.
+  local scale = player.sensor.timeScale or 1
+  observer_cfg.c1_release_delay_updates = player.currentCharge >= 100 and 0
+    or (scale > 0 and player.sensor.canCharge ~= false
+      and (math.ceil(warmup / scale) + math.ceil(math.max(0, 100 - player.currentCharge)
+        / (player.chargeSpeed * scale))) or 1000000)
   local obs = observer.observe(visible_side, state.observer, observer_cfg)
   local observe_ms = started and (now() - started) * 1000 or 0
   started = debug_file and now()

@@ -110,6 +110,12 @@ static BOOL collect_c1(uint32_t feature,Th09PlayerSensorReadFn rd,void *ctx,Th09
         shot->angle=f32(record+0x14);shot->speed=f32(record+0x18);
         shot->damage=i16(record+0x1c);shot->type=i16(record+0x22);
         shot->piercing=shot->type==2||shot->type==3;
+        /* pl00 selector 1 uses the verified delayed homing update. Keep it
+         * outside the generic linear predictor; Lua must opt into this model. */
+        shot->motion_model=!u32(record+0x28)&&u32(record+0x2c)==0x4415e0u&&
+            !u32(record+0x30)&&!u32(record+0x34)&&i16(record+0x20)==0&&
+            shot->type==0&&shot->damage==30&&shot->spawn_tick==0&&
+            shot->width==48&&shot->height==48&&shot->speed==0.5f ? 1:0;
         shot->supported=!u32(record+0x28)&&!u32(record+0x2c)&&!u32(record+0x30)&&!u32(record+0x34)
             &&shot->type>=0&&shot->type<=3&&shot->damage>0&&shot->width>0&&shot->height>0;
         if(!shot->supported)s->c1_limited=1;
@@ -138,6 +144,8 @@ static BOOL collect_c1_active(uint32_t raw,Th09PlayerSensorReadFn rd,void *ctx,T
         shot=&s->c1_active[s->c1_active_count++];shot->slot_id=slot+1;
         shot->x=f32(position);shot->y=f32(position+4);shot->width=f32(tail);shot->height=f32(tail+4);
         shot->vx=f32(tail+0xc);shot->vy=f32(tail+0x10);shot->age=f32(tail+0x28);
+        shot->speed=f32(tail+0x1c);shot->age_int=i32(tail+0x2c);
+        if(!bounded(shot->speed,10000)||shot->age_int<0||shot->age_int>1000000)return FALSE;
         shot->type=i16(tail+0x34);shot->damage=i16(tail+0x30);
         shot->piercing=shot->type==2||shot->type==3;
         /* Current AABB is authoritative even for custom movement. An unknown
@@ -146,6 +154,8 @@ static BOOL collect_c1_active(uint32_t raw,Th09PlayerSensorReadFn rd,void *ctx,T
         /* 41FDAA..41FDC1 skips type-2 damage on odd integer shot-timer ticks.
          * Geometry is still observable then, but is not a current damage hit. */
         shot->damage_ready=shot->type!=2 || (u32(tail+0x2c)&1u)==0;
+        shot->motion_model=s->c1_shots[j].motion_model&&u32(tail+0x44)==0x4415e0u&&
+            !u32(tail+0x4c)&&shot->type==0&&shot->damage==30?1:0;
     }
     return TRUE;
 }
@@ -168,6 +178,9 @@ BOOL Th09PlayerSensorCollect(uint32_t raw,Th09PlayerSensorReadFn rd,void *ctx,Th
     x=f32(pos+0x14);y=f32(pos+0x18);flags=u32(pos+0xc);
     s->base_x=f32(pos+0x168);s->base_y=f32(pos+0x16c);
     action_age=f32(tail+0x64);duration=f32(feature+0x28);warmup=f32(tail+0x88);
+    s->c1_homing_x=f32(tail+0x2c);s->c1_homing_y=f32(tail+0x30);
+    s->c1_homing_state_valid=bounded(s->c1_homing_x,1000000)&&bounded(s->c1_homing_y,1000000);
+    s->c1_homing_valid=s->c1_homing_state_valid&&s->c1_homing_x>-900;
     if(!finite(x)||!finite(y)||!finite(s->base_x)||!finite(s->base_y)||
        s->base_x<0||s->base_y<0||s->base_x>16||s->base_y>16||
        !finite(duration)||duration<0||duration>3600||!bounded(action_age,1000000)||
@@ -237,11 +250,69 @@ BOOL Th09PlayerSensorCollect(uint32_t raw,Th09PlayerSensorReadFn rd,void *ctx,Th
     return TRUE;
 }
 
+/* Enemy damage belongs to the exact managed Enemy being exported. Never join
+ * HP by screen coordinates: multiple spirits may occupy the same position. */
+BOOL Th09EnemySensorCollect(uint32_t raw,Th09PlayerSensorReadFn rd,void *ctx,Th09EnemySnapshot *s){
+    unsigned char body[0x90],flags[8],again[8],timer[12],pointers[4],health[4];
+    uint32_t status,status2,pool;int side,member=0,protection;
+    if(!s)return FALSE;memset(s,0,sizeof(*s));
+    if(!rd||raw<0x10000u||raw>0xffffabcfu)return FALSE;
+    for(side=0;side<2;side++){
+        if(!rd(0x4a7da0u+(uint32_t)side*0x38u,pointers,4,ctx))return FALSE;
+        pool=u32(pointers);
+        if(pool>=0x10000u&&pool<=0xffffffffu-0x5758u-128u*0x5430u&&
+            raw>=pool+0x5758u&&raw<pool+0x5758u+128u*0x5430u&&
+            (raw-pool-0x5758u)%0x5430u==0)member=1;
+    }
+    if(!member||!rd(raw+0x2dbc,body,sizeof(body),ctx)||!rd(raw+0x337c,flags,8,ctx)||
+       !rd(raw+0x53a8,timer,12,ctx))return FALSE;
+    status=u32(flags);status2=u32(flags+4);s->health=i32(body+0x8c);protection=i32(timer+8);
+    s->hit_width=f32(body);s->hit_height=f32(body+4);s->hit_x=f32(body+0x18);s->hit_y=f32(body+0x1c);
+    if(s->health < -10000000 || s->health>10000000 || protection < -1000000 || protection>1000000 ||
+       !bounded(s->hit_x,1000000)||!bounded(s->hit_y,1000000)||
+       !bounded(s->hit_width,4096)||!bounded(s->hit_height,4096)||s->hit_width<0||s->hit_height<0||
+       !bounded(f32(body+0xc),4096)||!bounded(f32(body+0x10),4096))return FALSE;
+    if(!rd(raw+0x337c,again,8,ctx)||memcmp(flags,again,8)||
+       !rd(raw+0x2e48,health,4,ctx)||i32(health)!=s->health)return FALSE;
+    s->shot_collision_enabled=(status&0x101u)==1&&!(status&0x30u)&&(status&0x40u)!=0;
+    s->shot_damageable=s->shot_collision_enabled&&(status&8u)!=0&&s->health>0&&!(status2&9u);
+    s->shot_damage_divisor=(status2&0x1c0u)?((status2&0x1000u)?2:4):1;
+    /* 41100E may query a second hit rectangle and overwrite shot totals.
+     * Preserve the known primary blocker but do not promise this exotic kill. */
+    s->damage_model_limited=f32(body+0xc)>0;
+    /* 403DE0 tests the INTEGER protection timer > 0. Some protected boss-like
+     * targets take one ninth; ordinary protected targets receive zero. */
+    if(protection>0){
+        if(!(status&2u))s->shot_damageable=0;
+        else if(status2&0x1c0u){
+            /* The protection branch scales total damage before the special
+             * branch reuses the unscaled shot subtotal. Not a simple divisor. */
+            s->damage_model_limited=1;s->shot_damageable=0;s->shot_damage_divisor=0;
+        }else s->shot_damage_divisor=9;
+    }
+    s->valid=1;return TRUE;
+}
+
 static void number(void *L,const Th09PlayerSensorLuaApi *a,const char *key,double v){
     a->push_string(L,key);a->push_number(L,v);a->set_table(L,-3);
 }
 static void boolean(void *L,const Th09PlayerSensorLuaApi *a,const char *key,int v){
     a->push_string(L,key);a->push_boolean(L,v);a->set_table(L,-3);
+}
+static void motion_model(void *L,const Th09PlayerSensorLuaApi *a,int model){
+    a->push_string(L,"motionModel");a->push_string(L,model==1?"reimu_c1_homing":"unknown");a->set_table(L,-3);
+}
+void Th09EnemySensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th09EnemySnapshot *s){
+    a->push_string(L,"sensor");a->create_table(L,0,11);
+    number(L,a,"apiVersion",1);boolean(L,a,"valid",s->valid);
+    number(L,a,"health",s->valid?s->health:0);
+    boolean(L,a,"shotDamageable",s->valid&&s->shot_damageable);
+    boolean(L,a,"shotCollisionEnabled",s->valid&&s->shot_collision_enabled);
+    number(L,a,"shotDamageDivisor",s->valid?s->shot_damage_divisor:0);
+    boolean(L,a,"damageModelLimited",!s->valid||s->damage_model_limited);
+    number(L,a,"hitX",s->valid?s->hit_x:0);number(L,a,"hitY",s->valid?s->hit_y:0);
+    number(L,a,"hitWidth",s->valid?s->hit_width:0);number(L,a,"hitHeight",s->valid?s->hit_height:0);
+    a->set_table(L,-3);
 }
 void Th09PlayerSensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th09PlayerSnapshot *s){
     int i;
@@ -283,9 +354,13 @@ void Th09PlayerSensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th
         a->set_table(L,-3);
     }
     a->set_table(L,-3);
-    a->push_string(L,"c1Profile");a->create_table(L,0,6);
+    a->push_string(L,"c1Profile");a->create_table(L,0,10);
     boolean(L,a,"valid",s->valid&&s->c1_valid);boolean(L,a,"limited",!s->valid||s->c1_limited);
     number(L,a,"actionDuration",s->valid?s->c1_action_duration:0);
+    boolean(L,a,"homingTargetValid",s->valid&&s->c1_homing_valid);
+    boolean(L,a,"homingStateValid",s->valid&&s->c1_homing_state_valid);
+    number(L,a,"homingTargetX",s->valid&&s->c1_homing_valid?s->c1_homing_x:0);
+    number(L,a,"homingTargetY",s->valid&&s->c1_homing_valid?s->c1_homing_y:0);
     a->push_string(L,"shots");a->create_table(L,s->valid&&s->c1_valid?s->c1_count:0,0);
     if(s->valid&&s->c1_valid)for(i=0;i<s->c1_count;i++){
         const Th09C1Shot *v=&s->c1_shots[i];
@@ -294,6 +369,7 @@ void Th09PlayerSensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th
         number(L,a,"width",v->width);number(L,a,"height",v->height);number(L,a,"angle",v->angle);
         number(L,a,"speed",v->speed);number(L,a,"damage",v->damage);number(L,a,"type",v->type);
         boolean(L,a,"supported",v->supported);boolean(L,a,"piercing",v->piercing);
+        motion_model(L,a,v->motion_model);
         a->set_table(L,-3);
     }
     a->set_table(L,-3);
@@ -301,7 +377,7 @@ void Th09PlayerSensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th
     a->push_string(L,"activeShots");a->create_table(L,s->valid&&s->c1_active_valid?s->c1_active_count:0,0);
     if(s->valid&&s->c1_active_valid)for(i=0;i<s->c1_active_count;i++){
         const Th09C1ActiveShot *v=&s->c1_active[i];
-        a->push_number(L,i+1);a->create_table(L,0,14);
+        a->push_number(L,i+1);a->create_table(L,0,17);
         number(L,a,"slotId",v->slot_id);number(L,a,"x",v->x);number(L,a,"y",v->y);
         number(L,a,"width",v->width);number(L,a,"height",v->height);
         number(L,a,"vx",v->vx);number(L,a,"vy",v->vy);number(L,a,"age",v->age);
@@ -309,6 +385,7 @@ void Th09PlayerSensorWriteTable(void *L,const Th09PlayerSensorLuaApi *a,const Th
         boolean(L,a,"supported",v->supported);boolean(L,a,"piercing",v->piercing);
         boolean(L,a,"currentGeometryOnly",TRUE);
         boolean(L,a,"damageReady",v->damage_ready);
+        motion_model(L,a,v->motion_model);number(L,a,"speed",v->speed);number(L,a,"ageInt",v->age_int);
         a->set_table(L,-3);
     }
     a->set_table(L,-3);a->set_table(L,-3);a->set_table(L,-3);
@@ -321,17 +398,24 @@ static void __cdecl append_sensor(void *L,void *managed){
         Th09PlayerSensorCollect(raw,rpm,NULL,&s);
     Th09PlayerSensorWriteTable(L,&lua_api,&s);
 }
+static void __cdecl append_enemy_sensor(void *L,void *managed){
+    uint32_t raw=0;Th09EnemySnapshot s;
+    memset(&s,0,sizeof(s));
+    if(managed && (uint32_t)(uintptr_t)managed<=0xfffffff7u&&
+       rpm((uint32_t)(uintptr_t)managed+8,&raw,4,NULL))Th09EnemySensorCollect(raw,rpm,NULL,&s);
+    Th09EnemySensorWriteTable(L,&lua_api,&s);
+}
 
 static void emit8(Th09PlayerSensorPlan *p,unsigned char b){p->code[p->code_length++]=b;}
 static void emit32(Th09PlayerSensorPlan *p,uint32_t b){memcpy(p->code+p->code_length,&b,4);p->code_length+=4;}
 static void rel(Th09PlayerSensorPlan *p,unsigned char op,uint32_t base,uint32_t to){
     emit8(p,op);emit32(p,to-(base+(uint32_t)p->code_length+4));
 }
-BOOL Th09PlayerSensorBuildPlan(uint32_t module,uint32_t code,uint32_t helper,Th09PlayerSensorPlan *p){
+static BOOL build_fields_plan(uint32_t module,uint32_t code,uint32_t helper,uint32_t rva,Th09PlayerSensorPlan *p){
     static const unsigned char prologue[5]={0x55,0x8b,0xec,0x6a,0xff};
     uint32_t displacement;
     if(!module||!code||!helper||!p)return FALSE;
-    memset(p,0,sizeof(*p));p->patch_address=module+TH09_PLAYER_FIELDS_RVA;p->gateway_address=code;
+    memset(p,0,sizeof(*p));p->patch_address=module+rva;p->gateway_address=code;
     memcpy(p->code,prologue,5);p->code_length=5;rel(p,0xe9,code,p->patch_address+5);
     while(p->code_length<16)emit8(p,0x90);
     p->bridge_address=code+(uint32_t)p->code_length;
@@ -351,6 +435,12 @@ BOOL Th09PlayerSensorBuildPlan(uint32_t module,uint32_t code,uint32_t helper,Th0
     p->patch[0]=0xe9;displacement=p->bridge_address-(p->patch_address+5);
     memcpy(p->patch+1,&displacement,4);return TRUE;
 }
+BOOL Th09PlayerSensorBuildPlan(uint32_t module,uint32_t code,uint32_t helper,Th09PlayerSensorPlan *p){
+    return build_fields_plan(module,code,helper,TH09_PLAYER_FIELDS_RVA,p);
+}
+BOOL Th09EnemySensorBuildPlan(uint32_t module,uint32_t code,uint32_t helper,Th09PlayerSensorPlan *p){
+    return build_fields_plan(module,code,helper,TH09_ENEMY_FIELDS_RVA,p);
+}
 
 static uint32_t hash(const unsigned char *p,size_t n){uint32_t h=2166136261u;while(n--)h=(h^*p++)*16777619u;return h;}
 typedef struct {uint32_t address,length,hash;} Fingerprint;
@@ -360,6 +450,7 @@ static BOOL verify_fingerprint(Fingerprint f){
 }
 BOOL Th09PlayerSensorInstall(Th09PlayerSensorLogFn logfn){
     static const unsigned short reloc[]={6,0x18,0x32,0x6a,0xa5,0xd9,0x10d,0x141,0x17c,0x1b7,0x1f5,0x229,0x25e,0x28e,0x2cc,0x308,0x340,0x3b6,0x3ee,0x462,0x49a};
+    static const unsigned short enemy_reloc[]={6,0x18,0x31,0x4b,0x69,0xa8,0x127,0x171,0x215,0x241,0x276,0x2c9,0x2ed,0x33b,0x35f,0x38a,0x3c5};
     static const Fingerprint apis[]={
         {0x17e0,0x19,0xef1c7cb3},{0x1860,0x66,0xa5d882bf},{0x19d0,0x1e,0x846388ac},
         {0x1b50,0x40,0x1f6bc85f},{0x1c60,0x2b,0x32bd45de}};
@@ -374,10 +465,16 @@ BOOL Th09PlayerSensorInstall(Th09PlayerSensorLogFn logfn){
         {0x41C8E0,0x110,0xD13CD57Bu},{0x41CF30,0x6C,0x5A94CA68u},
         {0x41CFE0,0x139,0x478B14ECu},{0x41BBE0,0xAC,0x1D88C1E9u},
         {0x41F2C0,0x37,0x2A1222A2u},{0x41F350,0x22C,0x93A0EF0Bu},
-        {0x41F580,0xFB,0xFFA2C9C3u},{0x41FCD0,0x20B,0xDA96AD60u}};
+        {0x41F580,0xFB,0xFFA2C9C3u},{0x41FCD0,0x20B,0xDA96AD60u},
+        /* Enemy HP/current damage gates and Reimu's delayed homing callback. */
+        {0x4415E0,0x1D7,0x25B43193u},{0x410E9A,0x3A,0xC111F307u},
+        {0x410FAB,0x13A,0x200E1FE9u},{0x4111B3,0x38,0x8DD26E4Au},
+        {0x403DE0,0x12,0xBABB302Au},{0x435F00,4,0x7951EE88u},
+        {0x4110EC,0x7A,0x811E4955u},{0x4915BC,8,0xE5F8CFF5u},
+        {0x491028,4,0x1C58782Bu},{0x48E2A4,4,0x1B587698u},{0x48E32C,4,0x4AE5A562u}};
     unsigned char original[TH09_PLAYER_FIELDS_SIZE],*code=NULL,*target;
     HMODULE module;uint32_t base,value;size_t i;DWORD old,unused;
-    Th09PlayerSensorPlan plan;BOOL success=FALSE;const char *reason="already attempted or wrong architecture";
+    Th09PlayerSensorPlan plan,enemy_plan;BOOL success=FALSE;const char *reason="already attempted or wrong architecture";
     if(sizeof(void*)!=4||InterlockedCompareExchange(&install_attempted,1,0))goto finish;
     reason="verified inject.dll missing";module=GetModuleHandleW(L"inject.dll");if(!module)goto finish;
     base=(uint32_t)(uintptr_t)module;
@@ -387,6 +484,12 @@ BOOL Th09PlayerSensorInstall(Th09PlayerSensorLogFn logfn){
         value=u32(original+reloc[i])-base+0x10000000u;memcpy(original+reloc[i],&value,4);
     }
     if(hash(original,sizeof(original))!=0xfcb504c4u)goto finish;
+    reason="SetEnemyFields fingerprint mismatch";
+    if(!rpm(base+TH09_ENEMY_FIELDS_RVA,original,TH09_ENEMY_FIELDS_SIZE,NULL))goto finish;
+    for(i=0;i<sizeof(enemy_reloc)/sizeof(enemy_reloc[0]);i++){
+        value=u32(original+enemy_reloc[i])-base+0x10000000u;memcpy(original+enemy_reloc[i],&value,4);
+    }
+    if(hash(original,TH09_ENEMY_FIELDS_SIZE)!=0x4b518202u)goto finish;
     reason="static Lua API fingerprint mismatch";
     for(i=0;i<sizeof(apis)/sizeof(apis[0]);i++){Fingerprint f=apis[i];f.address+=base;if(!verify_fingerprint(f))goto finish;}
     reason="game movement/charge/Medicine fingerprint mismatch";
@@ -399,19 +502,26 @@ BOOL Th09PlayerSensorInstall(Th09PlayerSensorLogFn logfn){
     reason="gateway allocation failed";code=VirtualAlloc(NULL,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
     if(!code)goto finish;
     Th09PlayerSensorBuildPlan(base,(uint32_t)(uintptr_t)code,(uint32_t)(uintptr_t)append_sensor,&plan);
+    Th09EnemySensorBuildPlan(base,(uint32_t)(uintptr_t)(code+256),(uint32_t)(uintptr_t)append_enemy_sensor,&enemy_plan);
     memcpy(code,plan.code,plan.code_length);
+    memcpy(code+256,enemy_plan.code,enemy_plan.code_length);
     reason="gateway protection/cache failed";
-    if(!VirtualProtect(code,4096,PAGE_EXECUTE_READ,&old)||!FlushInstructionCache(GetCurrentProcess(),code,plan.code_length))goto finish;
+    if(!VirtualProtect(code,4096,PAGE_EXECUTE_READ,&old)||!FlushInstructionCache(GetCurrentProcess(),code,256+enemy_plan.code_length))goto finish;
     target=(unsigned char *)(uintptr_t)plan.patch_address;
     reason="target protection/write/cache failed";
     if(!VirtualProtect(target,5,PAGE_EXECUTE_READWRITE,&old))goto finish;
     memcpy(target,plan.patch,5);
     if(!FlushInstructionCache(GetCurrentProcess(),target,5)||!VirtualProtect(target,5,old,&unused)||memcmp(target,plan.patch,5))goto finish;
+    target=(unsigned char *)(uintptr_t)enemy_plan.patch_address;
+    reason="enemy target protection/write/cache failed";
+    if(!VirtualProtect(target,5,PAGE_EXECUTE_READWRITE,&old))goto finish;
+    memcpy(target,enemy_plan.patch,5);
+    if(!FlushInstructionCache(GetCurrentProcess(),target,5)||!VirtualProtect(target,5,old,&unused)||memcmp(target,enemy_plan.patch,5))goto finish;
     success=TRUE;
 finish:
     /* Startup handshake rejects failure. Never free a possibly published gateway. */
     if(logfn){char msg[256];
-        if(success)strcpy(msg,"player_sensor: install=ok api=1 readonly snapshot; poison recomputed, C gate exported");
+        if(success)strcpy(msg,"player_sensor: install=ok api=1 readonly snapshot; poison recomputed, C gate exported; enemy HP and Reimu C1 model exported");
         else {_snprintf(msg,sizeof(msg)-1,"player_sensor: install=FAILED reason=%s",reason);msg[sizeof(msg)-1]=0;}
         logfn(msg);
     }

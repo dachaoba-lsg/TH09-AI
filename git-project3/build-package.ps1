@@ -1,4 +1,4 @@
-﻿param([string] $Version = '3.3.0-test', [switch] $Overwrite,
+param([string] $Version = '3.5.0-test', [switch] $Overwrite,
     [string] $PackageName = 'DS-TH09-AI', [string] $ZipBase = '')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid package version.' }

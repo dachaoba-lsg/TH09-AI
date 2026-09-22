@@ -55,6 +55,7 @@ local columns = {
   "c1_action_active", "followup_confirmed", "followup_z_requests", "followup_protection",
   "protected_route_checked", "protected_route_collides", "post_c2_phase", "post_c2_age",
   "post_c2_target_y", "cadence_limit", "bloom_cadence",
+  "c1_damage_model_valid", "c1_kill_count", "c1_contact_count", "c1_kill_delay",
 }
 local debug_file = nil
 if config.debug_log then
@@ -105,6 +106,7 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
     plan.followup_z_requests, plan.followup_protection, movement.protected_route_checked == true,
     movement.protected_route_collides == true, plan.post_c2_phase, plan.post_c2_age,
     plan.post_c2_target_y, plan.cadence_limit, plan.bloom_cadence,
+    c1.damage_model_valid == true, c1.kill_count or 0, c1.contact_count or 0, c1.kill_delay or 0,
   }
   for index = 1, #columns do values[index] = tostring(values[index] == nil and "" or values[index]) end
   debug_file:write(table.concat(values, ",") .. "\n")
@@ -183,7 +185,7 @@ function main()
     bloom.reset(state.bloom, true)
     state.observer = {}
     if not state.sensor_fault_reported then
-      print("TH09-AI: player sensor unavailable/invalid; AI input released. Use the complete matching 2.0.5 package and inspect runtime/native-window.log.")
+      print("TH09-AI: player sensor unavailable/invalid; AI input released. Use the complete matching release package and inspect runtime/native-window.log.")
       state.sensor_fault_reported = true
     end
     return

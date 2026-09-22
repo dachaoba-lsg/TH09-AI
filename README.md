@@ -7,8 +7,8 @@
 | 目录 | 版本 | 主要功能与逻辑 |
 | --- | --- | --- |
 | [git-project1](git-project1/) | 0.1.9 | 偏被动的局部避弹，随机选择 C1～C4；Spell Point 达到 500000 后停 Z 尝试断分，归零后恢复。 |
-| [git-project2](git-project2/) | 2.0.6 | 主动经营大连爆，以 C2 循环为主，配合普通射击和 C1；取消第一代的 50W 停枪锁。 |
-| [git-project3](git-project3/) | 3.3.0-test | 少弹时养资源、密集时更积极循环 C2；开放变向上限、圆形视野、注意力容量和恢复速度，供玩家自定义难度。 |
+| [git-project2](git-project2/) | 2.0.7 | 主动经营大连爆，以 C2 循环为主，配合普通射击和 C1；取消第一代的 50W 停枪锁；修复灵梦 C1 的击破判断。 |
+| [git-project3](git-project3/) | 3.5.0-test | 少弹时养资源、密集时更积极循环 C2；开放变向上限、圆形视野、注意力容量和恢复速度，供玩家自定义难度；修复灵梦 C1，支持经 key 校验的 1P 接管。 |
 
 各版本详细说明：[第一代](git-project1/版本功能与逻辑说明.md)、[第二代](git-project2/版本功能与逻辑说明.md)、[第三代](git-project3/版本功能与逻辑说明.md)。第三代的默认预设和参数范围见 [参数套装文档](git-project3/docs/PARAMETER-PRESETS.md)。
 
@@ -16,7 +16,7 @@
 
 ## 使用范围与已知限制
 
-- 用于日文版 TH09 v1.50a，在 Match Mode → Human vs Human 中控制 2P；2P 的 Charge Type 必须为 Slow。
+- 用于日文版 TH09 v1.50a 的 Match Mode → Human vs Human。第一、二代沿用原接管方式；第三代默认控制 2P，可在配置中通过有效 `ai.side_key` 启用 1P。被接管侧的 Charge Type 必须为 Slow；1P key 缺失或错误时按 2P 启动。
 - 需要自行准备游戏。本仓库不包含游戏本体、实战录像、调试日志或本机运行配置。
 - 会结合毒造成的实际减速预测路线，没有额外毒抗性或免疫。魔理沙激光、多条激光交叉或重合的实战处理仍有局限。
 - 感知与策略不改变游戏的子弹生成、碰撞物理、2P HP 或能量；局部路线规划不保证长期无伤。
@@ -36,7 +36,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 完整步骤与离线测试：[第一代 BUILDING](git-project1/BUILDING.md)、[第二代 BUILDING](git-project2/BUILDING.md)、[第三代 BUILDING](git-project3/BUILDING.md)。玩家使用方法位于各版本的 `package/README.md`。
 
-`vendor/`、`downloads/`、`work/`、`dist/` 等生成目录由各版本的 `.gitignore` 排除。源码下载包不是可直接启动的完整发行包；完整发行包可另行提供于 GitHub Releases。
+`vendor/`、`downloads/`、`work/`、`dist/` 等生成目录由各版本的 `.gitignore` 排除。源码下载包不是可直接启动的完整发行包；本仓库根目录另提供下方完整发行 ZIP，可直接下载；源码目录与完整发行包请分别使用。
 
 ## 许可与来源
 
@@ -46,6 +46,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 
 # 开箱即用的编译后的包
+
+| 版本 | 完整包下载 |
+| --- | --- |
+| 0.1.9 | [TH09-AI-v0.1.9.zip](TH09-AI-v0.1.9.zip) |
+| 2.0.7 | [TH09-AI-v2.0.7.zip](TH09-AI-v2.0.7.zip) |
+| 3.5.0-test | [DS-TH09-AI-v3.5.0-test.zip](DS-TH09-AI-v3.5.0-test.zip) |
+
+本次第二、三代更新均包含灵梦 C1 修复：结合血量、固灵状态、符札碰撞消耗和轨迹估计击破收益，不能保证每次 C1 都成功。3.5 的默认 `side_key` 为空，不随公开包提供有效 key；这是可被源码修改绕过的本地配置门槛。
+
+旧 2.0.5、3.3 ZIP 已由上方版本替换，历史文件仍可从 Git 提交历史找到。请完整解压新包，不混装旧 Lua 或原生模块。
+
 
 ~~~~~
 
@@ -68,12 +79,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 
 
-版本：0.2.7。AI去除停枪，随机C行为，主动打连爆，主动放C2，可以成为开花机练习器
+版本：2.0.7。AI去除停枪，随机C行为，主动打连爆，主动放C2，可以成为开花机练习器
 
 ~~~~
 
 通过网盘分享的文件：3.5包.zip
 链接: https://pan.baidu.com/s/1GcfG279_kfeP4t-T3Y9JCQ?pwd=xcqy 提取码: xcqy 
 --来自百度网盘超级会员v3的分享
-版本：0.3.5。AI添加自定义注意力 视野 1秒操作次数配置，设置AI难度，更像人（参数不同决定灵梦的C2白弹圈C不C）
+版本：3.5.0-test。AI添加自定义注意力 视野 1秒操作次数配置，设置AI难度，更像人（参数不同决定灵梦的C2白弹圈C不C）
 ~~~~

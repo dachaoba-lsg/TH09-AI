@@ -8,6 +8,8 @@
 #include <string.h>
 #include <wchar.h>
 #include "input_patches.h"
+#include "ai_side_config.h"
+#include "ai_input_patches.h"
 __declspec(dllimport) wchar_t ** WINAPI CommandLineToArgvW(const wchar_t *, int *);
 
 static int read_equal(HANDLE process, DWORD address, const unsigned char *expected, SIZE_T length) {
@@ -49,17 +51,14 @@ cleanup:
 int main(void) {
     wchar_t **argv, *slash;
     wchar_t directory[MAX_PATH], game_dir[MAX_PATH], command[MAX_PATH + 4];
-    wchar_t ai_dll[MAX_PATH], window_dll[MAX_PATH];
-    int argc, i, success = 0, verify_only = 0;
+    wchar_t ai_dll[MAX_PATH], window_dll[MAX_PATH], ini[MAX_PATH];
+    int argc, i, ai_side, success = 0, verify_only = 0;
+    const Th09AiInputPatch *ai_patch;
     DWORD ai_module;
     HANDLE support_events[2] = {NULL, NULL};
     wchar_t event_name[96];
     STARTUPINFOW startup;
     PROCESS_INFORMATION process;
-    /* Only the 2P Lua send function changes. Its edge-transition calculations
-       immediately following this instruction are left intact. */
-    const unsigned char old_or[7] = {0x66,0x09,0xB0,0xBA,0,0,0};
-    const unsigned char new_mov[7] = {0x66,0x89,0xB0,0xBA,0,0,0};
     argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv || (argc != 2 && argc != 3) || wcslen(argv[1]) >= MAX_PATH - 4) {
         fprintf(stderr, "Usage: th09ai-launcher.exe <absolute path to th09.exe>\n");
@@ -76,6 +75,14 @@ int main(void) {
     if (wcslen(directory) > MAX_PATH - 32) return 3;
     wcscpy(ai_dll, directory); wcscat(ai_dll, L"\\inject.dll");
     wcscpy(window_dll, directory); wcscat(window_dll, L"\\window_support.dll");
+    wcscpy(ini, directory); wcscat(ini, L"\\ka_ai_duka.ini");
+    ai_side = Th09ReadAiSide(ini);
+    if (!ai_side) {
+        fprintf(stderr, "Invalid AI side configuration: enable exactly one of 1P/2P with its script_path; disable and clear the other.\n");
+        LocalFree(argv);
+        return 3;
+    }
+    ai_patch = &th09_ai_input_patches[ai_side - 1];
     wcscpy(game_dir, argv[1]); slash = wcsrchr(game_dir, L'\\');
     if (!slash || _wcsicmp(slash + 1, L"th09.exe") != 0) return 3;
     *slash = 0;
@@ -108,11 +115,14 @@ int main(void) {
     }
     ai_module = load_dll(process.hProcess, ai_dll);
     if (!ai_module) { fprintf(stderr, "AI injection failed: %lu\n", GetLastError()); goto cleanup; }
-    if (!read_equal(process.hProcess, ai_module + 0x1DAAE, old_or, sizeof(old_or))) {
-        fprintf(stderr, "Unsupported upstream 2P input instruction.\n"); goto cleanup;
+    for (i = 0; i < 2; ++i) {
+        const Th09AiInputPatch *p = &th09_ai_input_patches[i];
+        if (!read_equal(process.hProcess, ai_module + p->rva, p->before, p->length)) {
+            fprintf(stderr, "Unsupported upstream %dP input instruction.\n", i + 1); goto cleanup;
+        }
     }
-    if (!patch_memory(process.hProcess, ai_module + 0x1DAAE, new_mov, sizeof(new_mov))) {
-        fprintf(stderr, "Could not isolate 2P AI input.\n"); goto cleanup;
+    if (!patch_memory(process.hProcess, ai_module + ai_patch->rva, ai_patch->after, ai_patch->length)) {
+        fprintf(stderr, "Could not isolate %dP AI input.\n", ai_side); goto cleanup;
     }
     for (i = 0; i < TH09_INPUT_PATCH_COUNT; ++i) {
         const Th09InputPatch *p = &th09_input_patches[i];
@@ -128,12 +138,12 @@ int main(void) {
         goto cleanup;
     }
     if (verify_only) {
-        printf("PASS: suspended-only input, laser-sensor and practice initialization verification; no game window or input.\n");
+        printf("PASS: AI=%dP suspended-only input, laser-sensor and practice initialization verification; no game window or input.\n", ai_side);
         success = 1;
         goto cleanup;
     }
     if (ResumeThread(process.hThread) == (DWORD)-1) goto cleanup;
-    printf("TH09-AI ready. PID=%lu; 2P menu=WASD/J/K/L; battle input=AI only.\n", process.dwProcessId);
+    printf("TH09-AI ready. PID=%lu; AI=%dP; physical mappings unchanged; selected AI battle input is exclusive.\n", process.dwProcessId, ai_side);
     success = 1;
 cleanup:
     if (!success || verify_only) {

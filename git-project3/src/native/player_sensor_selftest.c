@@ -77,6 +77,18 @@ static void c1_active(int slot,int template_index,int type){
     putf(s+0x43c,0);putf(s+0x440,-12);putf(s+0x458,3);put16(s+0x460,2);
     put16(s+0x462,1);put16(s+0x464,type);put32(s+0x480,0x700440+template_index*0x38);
 }
+static void reimu_template(int index){
+    unsigned char *r=feature+0x440+index*0x38;
+    c1_template(index,0,0);putf(r+4,8);putf(r+8,0);
+    putf(r+0xc,48);putf(r+0x10,48);putf(r+0x18,.5f);
+    put16(r+0x1c,30);put32(r+0x2c,0x4415e0);
+}
+static void reimu_active(void){
+    unsigned char *r=player+0xc11c;
+    c1_active(0,0,0);putf(r+0x430,48);putf(r+0x434,48);
+    putf(r+0x44c,.5f);put16(r+0x460,30);put32(r+0x474,0x4415e0);
+    put32(r+0x454,39);put32(r+0x45c,40);
+}
 static void cloud(int j,int side,int local,float age,float x,float y){
     unsigned char *e=ex+0x1c+j*0x4c;
     put32(e+4,side);put32(e+0xc,1);putf(e+0x14,age);put32(e+0x18,(uint32_t)(int)age);
@@ -95,6 +107,15 @@ static void __cdecl mock_set(void *L,int index){int target=top+index;Table *t;(v
 static const Th09PlayerSensorLuaApi api={mock_string,mock_number,mock_bool,mock_table,mock_set};
 static Value field(int table,const char *key){int i;Table *t=&tables[table];for(i=t->count-1;i>=0;i--)if(t->keys[i].kind==1&&!strcmp(t->keys[i].string,key))return t->values[i];return val(0);}
 static void reset_lua(void){int i;for(i=0;i<table_count;i++){free(tables[i].keys);free(tables[i].values);}memset(tables,0,sizeof(tables));top=table_count=max_top=0;mock_table(stack,0,16);}
+static void json_value(Value v){int i,array;Table *t;
+    if(v.kind==1){printf("\"%s\"",v.string);return;}
+    if(v.kind==2){printf("%.9g",v.number);return;}
+    if(v.kind==3){printf("%s",v.number?"true":"false");return;}
+    if(v.kind!=4){printf("null");return;}
+    t=&tables[v.table];array=t->count&&t->keys[0].kind==2;putchar(array?'[':'{');
+    for(i=0;i<t->count;i++){if(i)putchar(',');if(!array){json_value(t->keys[i]);putchar(':');}json_value(t->values[i]);}
+    putchar(array?']':'}');
+}
 static Th09PlayerSnapshot bridge_snapshot;static int bridge_calls;
 static void __cdecl bridge_helper(void *L,void *managed){
     check(L==stack,"real bridge saved ECX argument");check(managed==player,"real bridge saved EDX argument");
@@ -149,6 +170,33 @@ static int test_marisa_resource(const char *path){
      * callback or claiming full live-game character acceptance. */
     printf("player_sensor_real_marisa: %s (%d checks)\n",failures?"FAIL":"PASS",checks);return failures?1:0;
 }
+static int test_reimu_resource(const char *path,int emit_json){
+    FILE *f;long size;int i,j,k;uint32_t offset,index;Th09PlayerSnapshot s;
+    static const uint32_t callbacks[4][3]={{0,0x441ef0,0x4423d0},{0,0x4415e0,0x441f90},{0,0x442220,0x443300},{0,0x441880,0x443430}};
+    fixture();f=fopen(path,"rb");if(!f){puts("FAIL real Reimu SHT fixture open");return 1;}
+    fseek(f,0,SEEK_END);size=ftell(f);rewind(f);
+    if(size!=1652||fread(feature,1,(size_t)size,f)!=(size_t)size){fclose(f);puts("FAIL verified pl00.sht size");return 1;}fclose(f);
+    check(feature[2]==2&&feature[3]==0,"actual Reimu has two SHT selectors");
+    for(i=0;i<2;i++){
+        offset=get32(feature+0x42c+i*8);check(offset>=0x43c&&offset<(uint32_t)size,"actual Reimu table offset bounds");
+        if(offset<0x43c||offset>=(uint32_t)size)return 1;
+        put32(feature+0x42c+i*8,0x700000+offset);
+        for(j=0;j<128&&offset+2<=(uint32_t)size;j++,offset+=0x38){
+            if(feature[offset+1]&0x80)break;
+            check(offset+0x38<=(uint32_t)size,"actual Reimu record within file");if(offset+0x38>(uint32_t)size)return 1;
+            for(k=0;k<4;k++){
+                index=get32(feature+offset+0x28+k*4);check(index<3,"actual Reimu callback index verified subset");if(index>=3)return 1;
+                put32(feature+offset+0x28+k*4,callbacks[k][index]);
+            }
+        }
+        check(j<128,"actual Reimu negative terminator found");
+    }
+    check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&s.c1_valid&&!s.c1_limited&&s.c1_count==4&&s.c1_action_duration==50,"actual Reimu four supported C1 templates");
+    for(i=0;i<4;i++)check(s.c1_shots[i].template_index==i+1&&s.c1_shots[i].supported&&s.c1_shots[i].movement_model_version==1&&s.c1_shots[i].linear_until_tick==40&&s.c1_shots[i].damage==30&&s.c1_shots[i].speed==.5f&&s.c1_shots[i].width==48&&s.c1_shots[i].height==48&&!s.c1_shots[i].piercing,"actual Reimu each independent damage30 homing shot");
+    if(emit_json&&!failures){reset_lua();Th09PlayerSensorWriteTable(stack,&api,&s);json_value(stack[0]);puts("");}
+    else printf("player_sensor_real_reimu: %s (%d checks)\n",failures?"FAIL":"PASS",checks);
+    return failures?1:0;
+}
 static int perf_collect(void){
     LARGE_INTEGER freq,a,b;Th09PlayerSnapshot s;int j,k,ok=1;double ms;
     QueryPerformanceFrequency(&freq);
@@ -164,6 +212,8 @@ static int perf_collect(void){
 int main(int argc,char **argv){
     Th09PlayerSnapshot s;int j;Value sv,cv;
     if(argc==3&&!strcmp(argv[1],"--sht"))return test_marisa_resource(argv[2]);
+    if(argc==3&&!strcmp(argv[1],"--reimu-sht"))return test_reimu_resource(argv[2],0);
+    if(argc==3&&!strcmp(argv[1],"--reimu-fixture"))return test_reimu_resource(argv[2],1);
     if(argc==2&&!strcmp(argv[1],"--perf"))return perf_collect();
     if(argc==5&&!strcmp(argv[1],"--dump")){
         Th09PlayerSensorPlan p;Th09PlayerSensorBuildPlan(strtoul(argv[2],NULL,0),strtoul(argv[3],NULL,0),strtoul(argv[4],NULL,0),&p);
@@ -230,6 +280,22 @@ int main(int argc,char **argv){
     check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&!s.c1_valid&&s.c1_count==0,"unterminated SHT scan hard bounded");
     fixture();c1_template(0,0,0);c1_active(0,0,0);fail_address=0x600000+0xc11c+0x430;
     check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&s.c1_valid&&!s.c1_active_valid&&s.c1_active_count==0,"partial active-shot read invalidates its own snapshot");
+    fixture();reimu_template(0);reimu_template(1);reimu_active();
+    check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&s.character==0&&s.c1_valid&&!s.c1_limited&&s.c1_count==2&&s.c1_shots[0].supported,"verified Reimu callback supported only as its known model");
+    check(s.c1_shots[0].movement_model_version==1&&s.c1_shots[0].linear_until_tick==40&&s.c1_shots[1].template_index==2,"Reimu phase boundary and distinct template identities");
+    check(s.c1_active_count==1&&s.c1_active[0].supported&&s.c1_active[0].movement_model_version==1&&s.c1_active[0].speed==.5f&&s.c1_active[0].age_integer==40&&s.c1_active[0].previous_age_integer==39,"actual Reimu speed and integer clock read");
+    reset_lua();Th09PlayerSensorWriteTable(stack,&api,&s);sv=field(field(0,"sensor").table,"c1Profile");
+    check(field(sv.table,"character").number==0&&field(sv.table,"damageModelVersion").number==1&&field(sv.table,"movementModelVersion").number==1,"Lua precise Reimu model contract");
+    cv=field(sv.table,"shots");cv=tables[cv.table].values[1];
+    check(field(cv.table,"templateIndex").number==2&&field(cv.table,"linearUntilTick").number==40&&field(cv.table,"movementModelVersion").number==1,"Lua template identity and movement model fields");
+    cv=field(sv.table,"activeShots");cv=tables[cv.table].values[0];
+    check(field(cv.table,"speed").number==.5&&field(cv.table,"ageInteger").number==40&&field(cv.table,"previousAgeInteger").number==39,"Lua active Reimu motion fields");
+    put32(boards+0x1c,1);check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&s.character==1&&s.c1_limited&&!s.c1_shots[0].supported,"other character cannot borrow Reimu callback contract");
+    put32(boards+0x1c,0);put32(player+0xc11c+0x474,0x4415e1);
+    check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&s.c1_active_count==1&&!s.c1_active[0].supported&&!s.c1_active[0].movement_model_version,"changed active callback fails precise model closed");
+    reimu_active();putf(player+0xc11c+0x44c,0);
+    check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&!s.c1_active[0].supported,"zero active speed cannot normalize future trajectory");
+    fail_address=0x4a7db0;check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&s.character==-1&&!s.c1_shots[0].supported,"unknown character closes only precise C1 model");
     /* 3.0 step 1: opponent gauge is an independent fail-closed sub-snapshot. */
     fixture();check(Th09PlayerSensorCollect(0x600000,reader,NULL,&s)&&s.valid&&!s.opponent.valid,"no opponent board leaves own snapshot valid");
     opponent_fixture(0,150,200,10);

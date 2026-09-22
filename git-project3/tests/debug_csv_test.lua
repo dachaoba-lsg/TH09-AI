@@ -36,7 +36,7 @@ local function columns(line)
   return result
 end
 local header, first, second = columns(output[1]), columns(output[2]), columns(output[3])
-assert(#header == 162 and #first == 162 and #second == 162, 'CSV columns not aligned')
+assert(#header == 169 and #first == 169 and #second == 169, 'CSV columns not aligned')
 local map = {}; for index,name in ipairs(header) do map[name]=index end
 assert(tonumber(first[map.laser_count]) == 1, 'laser count missing from diagnostics')
 assert(tonumber(first[map.tracked_lasers]) == 0, 'first frame must not invent history')
@@ -113,4 +113,6 @@ assert(first[map.vision_visible_bullets] == '1' and first[map.vision_hidden_bull
 assert(first[map.vision_visible_poison] == '1', 'overlapping poison must remain visible')
 assert(first[map.move_change_budget] == '6' and first[map.attention_capacity_config] == '26'
   and first[map.attention_recovery_config] == '19', 'effective player settings missing')
-print('PASS: in-memory main-loop CSV integration, 162 matching columns, round/vision/player-setting diagnostics, no X')
+assert(header[162] == 'attention_enabled' and header[163] == 'c1_release_delay_updates'
+  and header[169] == 'c1_seed_wait_age', '3.5 diagnostics changed the original CSV prefix')
+print('PASS: in-memory main-loop CSV integration, 169 matching columns, round/vision/player-setting/C1 diagnostics, no X')

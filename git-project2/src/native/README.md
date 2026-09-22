@@ -288,6 +288,19 @@ therefore includes the matching complete TinyCC source archive and LGPL terms,
 plus this project's source/build scripts for relinking; see the third-party
 notices and source/BUILD.md. The TinyCC source is not covered by our MIT license.
 
+Version 2.0.7 additionally appends `enemy.sensor` through the verified upstream
+SetEnemyFields bridge, bound to that exported enemy rather than matched by
+screen position. It supplies health, current shot collision/damage gates,
+damage divisor and primary hitbox. Unknown secondary collision geometry and
+mixed protection rules are explicitly limited. Reimu selector-1 records expose
+`motionModel=reimu_c1_homing`; the C1 profile exposes validated current homing
+coordinates (enemy hitbox centre). Generic template support remains false for
+this custom callback. Lua uses a separate bounded damage/trajectory forecast.
+Both player/enemy bridges and game fingerprints must match before installation.
+Upgrade Lua and this module together; these fields are estimates' inputs, not
+native-confirmed future kills. Current C1 active objects still supply only their
+current AABB to the conservative damage check.
+
 Tests: tests/native_input_test.py emulates the real game reader; tests/
 native_setkeys_test.ps1 executes the real patched input instructions in private
 test memory; native window tests exercise only their own hidden windows.

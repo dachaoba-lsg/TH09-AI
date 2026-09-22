@@ -40,6 +40,9 @@ return {
     -- Preserve the selected chain through capture/overlap preparation. Armed
     -- charges may wait briefly for shape, but never cross the next C level.
     prepare_max_frames = 90, armed_max_frames = 24,
+    -- Recheck original C1 seeds at release. Already mature charges have only
+    -- a short recovery window, always ending before the next charge level.
+    c1_revalidate_max_frames = 8,
     -- 3.0 bloom (energy) mode. While the own field is dense, keep a PVP-style
     -- C2 rhythm (one release per few seconds) instead of waiting for an ideal
     -- chain. Observed PVP recordings: both players released a charge attack

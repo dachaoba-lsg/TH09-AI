@@ -1,3 +1,21 @@
+# DS-TH09-AI 3.5.0-test 公开源码构建
+
+当前版本修复灵梦 C1，并新增只读 enemy sensor；默认 `ai.side=2`、`ai.side_key=""`，有效 key 不应写入公开文件。四项玩家能力预算保持不变。
+
+Git 源码仓库请在根目录使用 `build-from-source.ps1 -CompilerPath <完整tcc.exe路径>`，详见仓库的 `BUILDING.md`。该入口保留 `package/` 模板与校验过的依赖准备流程。
+
+完整发行 ZIP 中的 `source/` 是另一种独立重建布局：保留外层运行库和许可，在该目录运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\rebuild-from-package.ps1 -CompilerPath 'C:\tools\tcc\tcc.exe' -Version 3.5.0-test
+```
+
+`enemy_sensor.c/.h`、`enemy_sensor_selftest.c`、`ai_side_config.h` 和 `ai_input_patches.h` 必须参与源码分发；构建只重编译本项目模块，上游运行库使用固定发行文件。不会自动安装或启动游戏。
+
+---
+
+以下保留历史版本构建、许可和重新链接资料；当前版本与入口以本页开头为准。
+
 # DS-TH09-AI 3.3.0-test 公开源码构建
 
 本版将视野、注意力和避弹变向上限开放给玩家，暂缓按固定生存秒数标定难度；原预设名称继续兼容。

@@ -14,7 +14,7 @@ local function obs()
   chain_enemies=2,chain_bullets=12,future_score=4,focus_value=0,
   timing={valid=true,improving=false,urgency=false},c2={},
   c1={valid=true,has_ignition=true,chain_score=4,chain_enemies=2,chain_bullets=12,
-   chain_ids={1,2},model_limited=false,hit_count=2},
+   chain_ids={1,2},model_limited=false,hit_count=2,damage_model_valid=true,kill_count=1},
   capture={valid=true,has_target=false}}
 end
 local function step(w,s,o)

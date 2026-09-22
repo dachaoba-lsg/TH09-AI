@@ -40,7 +40,8 @@ local function fixture(options)
   return { state = {}, cfg = config(options.cfg), time = 0, calls = 0,
     warmup = warmup, remaining_warmup = warmup, held = false,
     releases = {}, shot_presses = 0,
-    world = { player = { character = 0, x = 0, y = 320, life = 10,
+    -- Generic resource fixtures omit Reimu's separately tested damage proof.
+    world = { player = { character = 1, x = 0, y = 320, life = 10,
       currentCharge = 0, currentChargeMax = options.energy or 200,
       chargeSpeed = options.speed or 10,
       sensor = { valid = true, apiVersion = 1, state = 0, canCharge = true,

@@ -64,6 +64,9 @@ return {
       -- Search all release sites every six callbacks. Actual/cached-site
       -- resources are still assessed from the current snapshot each callback.
       position_search_interval = 6,
+      -- Reimu: bounded verified custom-motion forecast incl. 40-Timer delay;
+      -- damage/activation gates and impact-time resources still limit credit.
+      reimu_c1_prediction_updates = 90,
     },
   },
 

@@ -31,7 +31,7 @@ function Expect-Rejected([hashtable] $Options, [string] $Label) {
 }
 $initial = @{
     seconds=600; note='preserve me'; unrelated=@{ nested=@{ list=@(1,2,3); flag=$true } }
-    ai=@{ difficulty='human200'; debug_log=$true; enabled=$false; plan_interval=6;
+    ai=@{ side=1; side_key='non-secret-preservation-sentinel'; difficulty='human200'; debug_log=$true; enabled=$false; plan_interval=6;
         vision_radius=150; move_change_budget=6; tracked_threat=18;
         attention_capacity=33; attention_recovery_per_second=21; future_option='keep' }
 }
@@ -44,6 +44,8 @@ Check ((Read-Settings).ai.difficulty -eq 'human300') 'Preset case was not normal
 Check ($null -eq $r.ai.PSObject.Properties['attention_capacity'] -and $null -eq $r.ai.PSObject.Properties['attention_recovery_per_second']) 'Preset did not clear explicit attention overrides.'
 Check ($r.ai.vision_radius -eq 150 -and $r.ai.move_change_budget -eq 6) 'Preset modified vision or movement.'
 Check ($r.ai.debug_log -eq $true -and $r.ai.enabled -eq $false -and $r.ai.plan_interval -eq 6) 'Preset modified unrelated AI switches.'
+Check ($r.ai.side -eq 1) 'Preset changed the selected AI side.'
+Check ($r.ai.side_key -ceq 'non-secret-preservation-sentinel') 'Preset changed the saved side key.'
 Check ($r.note -eq 'preserve me' -and $r.unrelated.nested.list.Count -eq 3 -and $r.ai.future_option -eq 'keep' -and $r.ai.tracked_threat -eq 18) 'Unknown or legacy fields were lost.'
 
 Invoke-Edit @{ AttentionCapacity='256'; AttentionRecoveryPerSecond='0.1'; MoveChangeBudget='10'; VisionRadius='640' }
@@ -98,6 +100,8 @@ Invoke-Edit @{}
 $r = Read-Settings
 Check ($r.ai.difficulty -eq 'human480' -and $null -eq $r.ai.PSObject.Properties['attention_capacity'] -and $null -eq $r.ai.PSObject.Properties['attention_recovery_per_second']) 'Menu preset switch failed to clear manual attention.'
 Check ($r.ai.move_change_budget -eq 7 -and $r.ai.vision_radius -eq 180 -and $r.ai.future_option -eq 'keep') 'Menu preset switch changed independent/unknown values.'
+Check ($r.ai.side -eq 1) 'Ability menu changed the selected AI side.'
+Check ($r.ai.side_key -ceq 'non-secret-preservation-sentinel') 'Ability menu changed the saved side key.'
 # The .cmd entry forwards strings through powershell.exe -File; exercise that
 # binding as well as the in-process invocation used for scripted menu input.
 $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
@@ -105,6 +109,7 @@ $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powe
 Check ($LASTEXITCODE -eq 0) 'Native PowerShell -File invocation failed.'
 $r = Read-Settings
 Check ($r.ai.difficulty -eq 'human300' -and $r.ai.move_change_budget -eq 6 -and [Math]::Abs($r.ai.vision_radius - 448.0/3.0) -lt 0.00000001 -and $r.ai.attention_capacity -eq 32 -and $r.ai.attention_recovery_per_second -eq 24) 'Native CLI arguments were not stored as valid numeric settings.'
+Check ($r.ai.side_key -ceq 'non-secret-preservation-sentinel') 'Native CLI changed the saved side key.'
 # Match main.lua's enabled precedence in the menu: preset first, explicit bool
 # second. Mech may be explicitly re-enabled; a named human tier may be disabled.
 foreach ($case in @(

@@ -1,4 +1,4 @@
-# TH09-AI 2.0.6：源码构建
+# TH09-AI 2.0.7：源码构建
 
 本页适用于 Git 源码仓库。完整玩家 ZIP 中的 `source/rebuild-from-package.ps1` 是另一条重建入口，需要保留 ZIP 的外层运行库、许可和文档；不要单独拿出它代替本仓库入口。
 
@@ -23,10 +23,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 入口调用 `scripts/prepare-dependencies.ps1`，下载锁定版本的上游运行库并核对 SHA-256，放入本地 `vendor/`。校验失败时应检查下载和锁定信息，不要跳过校验。随后从 `src/native/` 编译本项目的启动器与支持模块，执行原生自测，把 `src/ai/`、`src/launcher/`、`package/` 和 `licenses/` 组装成发行包并运行公开包验收。
 
-默认版本为 `2.0.6`。产物为：
+默认版本为 `2.0.7`。产物为：
 
 ```text
-dist/TH09-AI-v2.0.6.zip       含运行文件、项目源码及第三方材料的发行 ZIP
+dist/TH09-AI-v2.0.7.zip       含运行文件、项目源码及第三方材料的发行 ZIP
 dist/TH09-AI/                 构建暂存目录
 work/                        自测、临时文件和构建记录
 vendor/                      已校验的上游依赖缓存
@@ -35,7 +35,7 @@ downloads/                   已校验的下载归档缓存
 
 ZIP 外层包名为 `TH09-AI`。生成过程不安装到游戏目录，也不启动游戏。原生窗口自测可能创建自己的隐藏测试窗口。
 
-已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '2.0.6-local'` 标识自己的构建，这不表示原发行者审核了修改。
+已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '2.0.7-local'` 标识自己的构建，这不表示原发行者审核了修改。
 
 ## 离线重建
 

@@ -165,7 +165,7 @@ scenario('missing and malformed ai blocks keep defaults',function()
 end)
 scenario('CSV appends thirteen fields after the existing 149 columns',function()
   local f=settings({});local header=split(f.output[1])
-  eq(#header,162,'3.3.0 CSV width');eq(header[1],'frame','first original column')
+  eq(#header,169,'3.5.0 CSV width');eq(header[1],'frame','first original column')
   eq(header[134],'hits_total','pre-3.2.5 prefix boundary');eq(header[135],'round_id','round diagnostics position')
   eq(header[149],'c2_ready_updates','existing 149-column suffix')
   local suffix={'vision_radius','vision_visible_bullets','vision_hidden_bullets','vision_visible_enemies',

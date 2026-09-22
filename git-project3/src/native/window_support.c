@@ -3,6 +3,9 @@
 #include "practice_patches.h"
 #include "laser_sensor.h"
 #include "player_sensor.h"
+#include "enemy_sensor.h"
+#include "ai_side_config.h"
+#include "ai_input_patches.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -44,6 +47,25 @@ static BOOL CALLBACK find_window(HWND window, LPARAM result)
     return TRUE;
 }
 
+/* Detect an INI change or mismatched launcher before permitting execution.
+ * The human side must still have the upstream OR instruction. */
+static BOOL ai_input_matches_side(int ai_side)
+{
+    HMODULE module = GetModuleHandleW(L"inject.dll");
+    unsigned char actual[7];
+    SIZE_T count;
+    int i;
+    if (!module) return FALSE;
+    for (i = 0; i < 2; ++i) {
+        const Th09AiInputPatch *p = &th09_ai_input_patches[i];
+        const unsigned char *expected = i == ai_side - 1 ? p->after : p->before;
+        if (!ReadProcessMemory(GetCurrentProcess(), (unsigned char *)module + p->rva,
+            actual, p->length, &count) || count != p->length || memcmp(actual, expected, count))
+            return FALSE;
+    }
+    return TRUE;
+}
+
 static DWORD WINAPI window_worker(void *unused)
 {
     wchar_t *slash;
@@ -54,8 +76,8 @@ static DWORD WINAPI window_worker(void *unused)
     char text[200];
     wchar_t event_name[96];
     HANDLE ready, failed;
-    BOOL practice_ok = FALSE, sensor_ok = FALSE, player_sensor_ok = FALSE;
-    int no_damage, invincible;
+    BOOL practice_ok = FALSE, sensor_ok = FALSE, player_sensor_ok = FALSE, enemy_sensor_ok = FALSE;
+    int no_damage, invincible, ai_side;
     (void)unused;
     wsprintfW(event_name, L"Local\\TH09AI-Support-%lu-Ready", GetCurrentProcessId());
     ready = OpenEventW(EVENT_MODIFY_STATE, FALSE, event_name);
@@ -68,8 +90,20 @@ static DWORD WINAPI window_worker(void *unused)
     wcscpy(g_log, g_ini);
     wcscat(g_log, L"native-window.log");
     wcscat(g_ini, L"ka_ai_duka.ini");
+    ai_side = Th09ReadAiSide(g_ini);
+    if (!ai_side || !ai_input_matches_side(ai_side)) {
+        native_log("ai-input: invalid side configuration or selected-side patch mismatch");
+        goto initialized;
+    }
+    sprintf(text, "ai-input: verified AI=%dP exclusive; human=%dP unchanged", ai_side, 3 - ai_side);
+    native_log(text);
     no_damage = GetPrivateProfileIntW(L"practice", L"player1_no_damage", 0, g_ini);
     invincible = GetPrivateProfileIntW(L"practice", L"player1_invincible", 0, g_ini);
+    if (ai_side == 1) {
+        no_damage = 0;
+        invincible = 0;
+        native_log("practice: AI=1P; player-1 practice forced off; no protection transferred to 2P");
+    }
     /* Do not install gameplay gates into an already-running host. Our native
        launcher provides the handshake while the main thread is suspended. */
     if ((no_damage || invincible) && (!ready || !failed)) {
@@ -86,13 +120,15 @@ static DWORD WINAPI window_worker(void *unused)
     if (!sensor_ok) goto initialized;
     player_sensor_ok = Th09PlayerSensorInstall(native_log);
     if (!player_sensor_ok) goto initialized;
+    enemy_sensor_ok = Th09EnemySensorInstall(native_log);
+    if (!enemy_sensor_ok) goto initialized;
     practice_ok = Th09PracticeInstall(no_damage != 0, invincible != 0, native_log);
 initialized:
-    if (practice_ok && sensor_ok && player_sensor_ok) { if (ready) SetEvent(ready); }
+    if (practice_ok && sensor_ok && player_sensor_ok && enemy_sensor_ok) { if (ready) SetEvent(ready); }
     else { if (failed) SetEvent(failed); }
     if (ready) CloseHandle(ready);
     if (failed) CloseHandle(failed);
-    if (!practice_ok || !sensor_ok || !player_sensor_ok) return 1;
+    if (!practice_ok || !sensor_ok || !player_sensor_ok || !enemy_sensor_ok) return 1;
     if (!GetPrivateProfileIntW(L"window", L"enabled", 1, g_ini)) {
         native_log("Native window resizing is disabled by configuration.");
         return 0;

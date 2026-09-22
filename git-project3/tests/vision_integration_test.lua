@@ -109,7 +109,7 @@ local function fixture(ai)
       'observer bloom and dodge must receive the identical filtered snapshot')
     check(math.floor(f.sent[#f.sent]/2)%2==0,'vision integration cannot emit X')
     local header,values,row=split(f.output[1]),split(f.output[#f.output]),{}
-    eq(#header,162,'vision CSV width');eq(#values,#header,'CSV row width')
+    eq(#header,169,'vision CSV width');eq(#values,#header,'CSV row width')
     for i,name in ipairs(header)do row[name]=values[i]end
     f.row=row;return row
   end

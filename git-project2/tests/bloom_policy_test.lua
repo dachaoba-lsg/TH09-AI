@@ -14,7 +14,9 @@ local function config(overrides)
   return out
 end
 local function world(character)
-  return { player = { character = character or 0, x = 0, y = 320, life = 10,
+  -- Legacy geometry-only fixtures use Marisa; audited Reimu proof paths have
+  -- their own suite and an explicit verified snapshot in the 16-role case.
+  return { player = { character = character or 1, x = 0, y = 320, life = 10,
     currentCharge = 0, currentChargeMax = 400, chargeSpeed = 10,
     spellPoint = 0, combo = 0,
     sensor = { valid = true, apiVersion = 1, state = 0, canCharge = true,
@@ -69,7 +71,12 @@ do
     local r = step(w, state, cfg, observation())
     assert(r.press_z and r.target_level == 2, name .. " excluded from C2 bloom")
     -- A separate poorer scene still uses active C1, with a full energy meter.
-    r = step(w, {}, cfg, observation({ chain_score = 3.5, chain_enemies = 2, chain_bullets = 2, future_score = 3.5 }))
+    local weaker = observation({ chain_score = 3.5, chain_enemies = 2, chain_bullets = 2, future_score = 3.5 })
+    if index == 1 then
+      weaker.c1 = { valid = true, has_ignition = true, damage_model_valid = true, kill_count = 1,
+        chain_ids = {1,2}, chain_score = 3.5, chain_enemies = 2, chain_bullets = 2 }
+    end
+    r = step(w, {}, cfg, weaker)
     assert(r.press_z and r.target_level == 1, name .. " lost active C1 bloom")
   end
 end

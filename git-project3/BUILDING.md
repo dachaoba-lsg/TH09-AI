@@ -1,4 +1,4 @@
-# DS-TH09-AI 3.3.0-test：源码构建
+# DS-TH09-AI 3.5.0-test：源码构建
 
 本页适用于 Git 源码仓库。完整玩家 ZIP 中的 `source/rebuild-from-package.ps1` 是另一条重建入口，需要保留 ZIP 的外层运行库、许可和文档；不要单独拿出它代替本仓库入口。
 
@@ -23,10 +23,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 入口调用 `scripts/prepare-dependencies.ps1`，下载锁定版本的上游运行库并核对 SHA-256，放入本地 `vendor/`。校验失败时应检查下载和锁定信息，不要跳过校验。随后从 `src/native/` 编译本项目的启动器与支持模块，执行原生自测，把 `src/ai/`、`src/launcher/`、`package/` 和 `licenses/` 组装成发行包并运行公开包验收。
 
-默认版本为 `3.3.0-test`。产物为：
+默认版本为 `3.5.0-test`。产物为：
 
 ```text
-dist/DS-TH09-AI-v3.3.0-test.zip       含运行文件、项目源码及第三方材料的发行 ZIP
+dist/DS-TH09-AI-v3.5.0-test.zip       含运行文件、项目源码及第三方材料的发行 ZIP
 dist/TH09-AI/                 构建暂存目录
 work/                        自测、临时文件和构建记录
 vendor/                      已校验的上游依赖缓存
@@ -35,7 +35,7 @@ downloads/                   已校验的下载归档缓存
 
 ZIP 外层包名为 `DS-TH09-AI`。生成过程不安装到游戏目录，也不启动游戏。原生窗口自测可能创建自己的隐藏测试窗口。
 
-已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '3.3.0-local'` 标识自己的构建，这不表示原发行者审核了修改。
+已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '3.5.0-local'` 标识自己的构建，这不表示原发行者审核了修改。
 
 ## 离线重建
 
@@ -61,6 +61,16 @@ python tests/run_all_lua.py
 测试入口自动发现当前 `*_test.lua` 套件，每套使用独立的 Lua 5.1 进程；日志和结果 JSON 写入 `work/test-results/`。旧版性能对照依赖未公开的历史快照，缺失时明确报告 `SKIP`，当前版本检查仍运行；对照时间列的 0 不表示测得零耗时。微基准不是游戏 FPS。
 
 失败时保留完整错误、命令和版本用于定位。离线 Lua 与原生自测通过，并不等于已经验证游戏中的生存表现。
+
+## 可选：C1 原程序与接管侧校验
+
+默认构建会执行窗口、激光、player/enemy sensor 原生自测。`tests/reimu_c1_test.lua` 和 `tests/c1_planning_test.lua` 已纳入统一 Lua 入口。
+
+`native_enemy_sensor_test.py`、`native_player_sensor_test.py` 可对已校验的上游运行库进行隔离 x86 ABI 测试；`native_reimu_combat_test.py --game-exe <th09.exe>` 只读取自己持有的兼容游戏文件，在 Unicorn 合成内存内校验 C1 机制，不启动游戏。需要额外的 `pefile`、`unicorn`，可安装在 `work/input-fix/python/`。
+
+`reimu_c1_native_fixture_test.py --player <player.json> --enemy <enemy.json>` 读取原生自测生成的本地 fixture；游戏数据与 fixture 不随源码发布，未提供时不属于默认回归。
+
+`ai_side_launcher_test.ps1 -SourceGameRoot <游戏目录>` 测试配置回退；完整有效 key 路径可通过进程环境变量 `TH09_TEST_SIDE_KEY` 提供。不要把有效 key 写入命令脚本、公开测试样例或提交文件。可选 `-VerifySuspended` 只校验自己的复制进程，绝不恢复游戏主线程。它们都不属于无需游戏的默认构建。
 
 ## 可选：真实启动配置集成测试
 

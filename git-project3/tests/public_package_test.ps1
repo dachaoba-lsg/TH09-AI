@@ -33,6 +33,8 @@ try {
         'source/BUILD.md','source/build-native.ps1','source/build-package.ps1',
         'source/build-public-package.ps1','source/rebuild-from-package.ps1',
         'source/LICENSE.txt','source/src/native/launcher.c',
+        'source/src/native/ai_side_config.h','source/src/native/ai_input_patches.h',
+        'source/src/native/enemy_sensor.c','source/src/native/enemy_sensor.h','source/src/native/enemy_sensor_selftest.c',
         'source/src/native/window_support.c','source/src/native/practice_patches.c',
         'source/src/native/laser_sensor.c','source/src/native/laser_sensor.h',
         'source/src/native/player_sensor.c','source/src/native/player_sensor.h',
@@ -61,6 +63,8 @@ try {
     Check ($settings.practice.player1_invincible -eq $false) 'Invincibility enabled in public default.'
     Check ($settings.window.resizable -eq $true) 'Resizable default changed.'
     Check ($settings.ai.difficulty -eq 'human200') 'Public dodge difficulty default is not human200.'
+    Check ($settings.ai.side -is [int] -and $settings.ai.side -eq 2) 'Public AI side must default to numeric 2.'
+    Check ($settings.ai.side_key -is [string] -and $settings.ai.side_key.Length -eq 0) 'Public AI side key must be an empty string.'
     Check ($settings.ai.move_change_budget -eq 6) 'Public movement-change budget default is not 6.'
     Check ([Math]::Abs([double]$settings.ai.vision_radius - (448.0 / 3.0)) -lt 0.00000001) 'Public vision radius default is not one third of the 448-unit field height.'
     Check ($null -eq $settings.ai.PSObject.Properties['attention_capacity']) 'The public default must not override preset attention capacity.'

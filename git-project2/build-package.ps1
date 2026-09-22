@@ -1,4 +1,4 @@
-﻿param([string] $Version = '2.0.6', [switch] $Overwrite)
+﻿param([string] $Version = '2.0.7', [switch] $Overwrite)
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid package version.' }
 $dist = Join-Path $PSScriptRoot 'dist\TH09-AI'

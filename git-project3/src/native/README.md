@@ -1,3 +1,86 @@
+# DS-TH09-AI native support: 3.5.0-test
+
+Version 3.5 adds read-only enemy.combat metadata after the verified upstream
+SetEnemyFields export (RVA 0x1E630). The managed object's ID and raw pointer are
+read together; board/container/slot checks bind the snapshot to the same enemy.
+Invalid or changed reads export valid=false, never assumed zero-HP enemies.
+The hook preserves registers, flags and floating-point state and only appends
+Lua-owned data. It does not modify game HP, hitboxes, projectiles or physics.
+
+The player sensor recognizes the verified Reimu C1 template and callback. Lua
+uses actual HP, spirit damage reduction, direct-shot ignition eligibility,
+nonpiercing first-contact ownership, remaining charge time and the verified
+expansion/homing kernel for bounded C1 resource estimates. Secondary hitboxes
+can consume shots; unsupported damage combinations are not promised kills.
+No hidden field resource is admitted around the circular vision filter.
+
+Source builds must compile enemy_sensor.c into window_support.dll and run
+enemy_sensor_selftest.c. Matching native support and Lua are required.
+
+The launcher adds ai.side_key as a local configuration gate for requested 1P
+ownership. Only a SHA256 digest is stored in source. Missing/wrong/non-string
+keys resolve to effective 2P before practice handling and INI generation.
+The native loader continues to verify the resulting single enabled AI side.
+This is a local convenience gate, not online authorization or tamper resistance.
+Public defaults and logs must never contain the authorized key.
+
+Native snapshot, original-x86 and suspended-launch checks are separate from live
+game acceptance. Consult the current delivery verification record for counts.
+
+---
+
+# 3.4 及更早版本的历史原文
+
+以下内容只作对应版本参考；1P 无 key 的旧行为已被3.5上方规则取代。
+
+# DS-TH09-AI native support: 3.4.0-test
+
+Version 3.4 adds selectable AI ownership while preserving the 3.3 physical
+keyboard mapping, sensing, attack policy, difficulty parameters and 162-column
+CSV. The player-facing configuration is `launcher-settings.json`, inside its
+existing `ai` object: numeric `side=1` or `side=2`, defaulting to 2 when absent.
+Invalid values are rejected by the launcher; restart after editing settings.
+
+The launcher generates exactly one enabled AI section in `ka_ai_duka.ini`.
+The chosen section receives the Lua script path; the other section is disabled
+and has an empty script path. `ai_side_config.h` rejects inconsistent INI input.
+The native launcher selects one checked patch from `ai_input_patches.h`:
+
+| AI side | Original inject.dll wrapper | Checked OR-to-MOV instruction RVA |
+| --- | --- | --- |
+| 1P | Lua_SendKey1P | `0x1DA0E` |
+| 2P | Lua_SendKey2P | `0x1DAAE` |
+
+Only that AI wrapper is changed in the newly launched process. The selected
+side receives exclusive AI battle input, including the zero-input timeout latch;
+the human side retains physical keyboard input. Both menus retain their physical
+controls. This does not rewrite the original DLL on disk or the game's key map.
+1P remains FULL (arrows/Z/X/Shift); 2P remains LEFT remapped to WASD/J/K/L.
+The Lua sensor and decision loop receive the selected board as their own side;
+the other board is the opponent. Only the AI side requires Charge Type=Slow.
+
+The legacy `practice.player1_no_damage` and `practice.player1_invincible` keys
+always mean 1P. When AI controls 1P, these effects are suppressed at launch so the
+robot is not protected; the JSON values are preserved and the console explains
+the suppression. Switching back to AI=2P applies the saved 1P practice settings
+again. There is no new 2P practice protection. Window settings remain independent.
+
+Version 3.4 passes 131072 dual-side x86 input cases, 18 INI/ACP boundary
+checks and 18 suspended launch/configuration checks, plus native window and
+sensor regressions. Suspended tests never resume the game main thread; live
+match acceptance remains separate. Use matching launcher, native support and
+Lua from the complete 3.4 package, and retain older release ZIPs.
+
+---
+
+# Historical native implementation reference
+
+The following 0.1.9/2.0.5 text is preserved verbatim for API and implementation
+history. Its fixed-2P ownership, old version labels, historical tests and old CSV
+statements are not current 3.4 requirements; the current ownership and practice
+rules above take precedence. Sensor field details remain useful technical
+reference where the current implementation retains them.
+
 # TH09-AI native support (0.1.9 compatibility layer, extended read-only for 2.0.5)
 
 Only the known Japanese v1.50a executable and original ka_ai_duka v1.7 DLL

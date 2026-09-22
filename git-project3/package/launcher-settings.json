@@ -12,6 +12,8 @@
     "keep_aspect": true
   },
   "ai": {
+    "side": 2,
+    "side_key": "",
     "difficulty": "human200",
     "move_change_budget": 6,
     "vision_radius": 149.333333333333,

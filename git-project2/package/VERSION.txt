@@ -1,7 +1,11 @@
-TH09-AI 2.0.6
+TH09-AI 2.0.7
+
+Reimu C1: readonly target HP, damage eligibility, defense multiplier and collision bounds; four non-piercing 30-damage charms; homing begins after 40 integer Timer units
+C1 yield: estimate defeat, not coverage alone; conservatively budget resources at impact time; unactivated spirits first use selective Shift capture and ordinary shots
+Compatibility: complete Lua/native upgrade required; C2 260/200/480 cadence and established safe dodge unchanged
 
 Author: 圣诞老人的驯鹿-xunlu
-Release: all-character capture/C2-cycle bloom test package; Lua/native regressions passed; package/rebuild records accompany delivery; user live acceptance pending
+Release: Reimu C1 damage-aware bloom test package; final Lua and native offline checks passed; package/rebuild records accompany delivery; user live acceptance pending
 Strategy: spatial fairy/spirit/erasable-bullet chains; deliberate C1/C2 only; resource-qualified C2 and C1 coverage/yield comparison
 Removed: random C1-C4 selection and the 500000 Spell Point firing lock
 Movement: Y >= 150 policy limit (roughly below top third), physical y=16..432 unchanged; no ordinary-shot/C1 upward chase; limited spirit capture; original dodge geometry retained
@@ -31,7 +35,7 @@ Recharge: a refill to 2/3 is an observed outcome, not an ignition/energy gate; h
 Correction: 2.0.0 reused ordinary-shot ignition and overcounted nearby erasable-bullet yield
 Post-C2 route: confirmed C2 protection prefers a low landing band; after expiry, observed lower-field pressure may move the target back to mid field; real dodge geometry remains authoritative
 Diagnostics: CSV retains the prior 104 columns and adds post_c2_phase, post_c2_age, post_c2_target_y, cadence_limit and bloom_cadence (109 columns)
-Upgrade: use the full 2.0.6 package, including bloom.lua and bloom_observer.lua; retain the 2.0.5 and older ZIPs separately
+Upgrade: use the full 2.0.7 Lua/native package, including bloom.lua and bloom_observer.lua; retain the 2.0.6 and older ZIPs separately
 
 Runtime: ka_ai_duka 1.7 (unmodified upstream binaries)
 Native compatibility: existing native version markers and player.sensor apiVersion 1 retained; followupApiVersion 1 readonly extension added
@@ -48,8 +52,12 @@ Battle limit: launcher-settings.json top-level seconds, default 600; integer 0-8
 Timing: AI battle callbacks / 60; pause-menu scheduling not separately verified; stop remains latched until next battle
 Practice: 1P no-damage preserves exact HP; invincible takes precedence; both default false
 Unchanged: no X, timing/input isolation/practice/window rules; no game spawn, energy, poison or physics edits
-Diagnostics: 104 CSV columns; prior 88 plus 16 capture/C1/common-wave/input/follow-up/endpoint fields; requests and estimated yield are not confirmed kills/returns
+Diagnostics baseline: 2.0.6 has 109 CSV columns; requests and estimated yield are not confirmed kills/returns; current schema verification belongs to final delivery record
 Known limitations: custom C1 callbacks and future active-shot motion may be unmodeled; heuristic chains, circle/blast races, recharge and bounded endpoint predictions; no guaranteed survival
 Baseline feedback: user confirmed 0.1.9 poison tests and accepted 2.0.2; neither is all-character 2.0.5 acceptance
-Acceptance: final 2.0.5 regression, package, source-rebuild and hash results belong to this delivery final record; user live acceptance pending; microbenchmarks do not guarantee FPS
+Acceptance: 2.0.7 final 21 Lua suites and native offline checks passed; package, source-rebuild and hash records belong to final delivery; user live acceptance pending; microbenchmarks do not guarantee FPS
 Feedback: video plus ai/ai_debug.csv and runtime/native-window.log; packaging does not replace installed games
+
+2.0.7 verification: final 21 Lua suites PASS; Reimu observer/policy/integration 406/203/113 checks; native 61074 checks; actual SHT 61/43 checks; x86 export ABI 12 scenarios; four suspended initialization configurations PASS
+2.0.7 CSV: 113 columns; c1_damage_model_valid, c1_kill_count, c1_contact_count, c1_kill_delay added to historical 109; delay includes charging, warm-up and flight from now; zero does not guarantee impact
+C1 estimates: predicted defeats/contacts, not observed kills; one explosion per entity; insufficient damage retains spirit capture/ordinary shots; invalid Reimu model never borrows ordinary-shot scores for fresh C1 except deadline/already-charged physical release

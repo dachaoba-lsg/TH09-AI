@@ -33,7 +33,7 @@ $testDirectory = Join-Path $projectRoot 'work\native-tests'
 [System.IO.Directory]::CreateDirectory($testDirectory) | Out-Null
 $testExecutable = Join-Path $testDirectory 'native_setkeys_test.exe'
 $testSource = Join-Path $PSScriptRoot 'native_setkeys_test.c'
-& $CompilerPath '-o' $testExecutable $testSource
+& $CompilerPath '-Wall' '-Werror' '-o' $testExecutable $testSource
 if ($LASTEXITCODE -ne 0) {
     throw "Native test compilation failed: exit $LASTEXITCODE"
 }
