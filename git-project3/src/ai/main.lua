@@ -3,7 +3,7 @@ local keys = dofile("keyutils.lua")
 local dodge = dofile("dodge.lua")
 local observer = dofile("bloom_observer.lua")
 local bloom = dofile("bloom.lua")
-local AI_VERSION = "3.7.0-test"
+local AI_VERSION = "3.9.0-test"
 
 local function loadRuntimeSettings()
   -- The launcher owns the user-facing settings in launcher-settings.json and
@@ -54,6 +54,9 @@ local function applyAttentionSettings(attention, ai)
   -- silently pin every tier to the same budget (3.2.0/3.2.1 regression: all
   -- tiers ran as human200). Use difficulty "custom" to hand-tune those two.
   config.attention_difficulty = preset.enabled == false and "mech" or difficulty
+  -- Keep 3.8 movement style separate from attention.enabled. In particular,
+  -- a mech user may explicitly enable attention without opting into 3.8.
+  config.dodge.human_movement.mech = config.attention_difficulty == "mech"
   for name, range in pairs(ATTENTION_NUMBERS) do
     local value = ai[name]
     if type(value) == "number" and value == value and value ~= math.huge
@@ -140,6 +143,9 @@ local columns = {
   "rescue_state", "rescue_reason", "rescue_pressure", "rescue_age", "rescue_ready_updates",
   "rescue_known_ttc", "rescue_late", "rescue_cooldown", "rescue_confirmed", "rescue_attempts", "rescue_releases",
   "rescue_observed", "rescue_routes_total", "rescue_routes_safe", "rescue_route_ttc",
+  "human_enabled", "human_pressure", "human_slow", "human_speed_held", "human_speed_override", "human_lane_cost",
+  "poison_nav_active", "poison_level", "poison_risk", "poison_target_x", "poison_target_y",
+  "poison_probe_count", "poison_nav_samples", "poison_cost",
 }
 -- The game host runs Lua with a stripped standard environment (print is nil in
 -- ka_ai_duka), so every optional global is probed before use: an unavailable
@@ -198,6 +204,12 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
   local cap_alert = movement.move_cap_risk == true
   local rescue_state, rescue_reason = state.bloom.rescue_state or 'idle', state.bloom.rescue_reason or ''
   local rescue_late, rescue_confirmed = state.bloom.rescue_late == true, state.bloom.rescue_confirmed == true
+  local human = state.human_movement
+  local human_event = human and (human.debug_slow ~= movement.human_slow
+    or human.debug_focus ~= movement.focus or human.debug_override ~= movement.human_speed_override)
+  local poison_active, poison_level = movement.poison_nav_active or 0, movement.poison_level or 0
+  local poison_event = poison_active ~= (state.poison_debug_active or 0)
+    or poison_level ~= (state.poison_debug_level or 0)
   local event = plan.phase == 'release' or plan.reason == 'chain_lost_cancel'
     or plan.phase ~= state.last_debug_phase or state.hit == true or state.round_start == true
     or state.bloom.c2_reserve_active ~= state.last_debug_reserve
@@ -210,6 +222,13 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
     or rescue_reason ~= state.last_debug_rescue_reason
     or rescue_late ~= state.last_debug_rescue_late
     or rescue_confirmed ~= state.last_debug_rescue_confirmed
+    or human_event == true
+    or poison_event
+  state.poison_debug_active, state.poison_debug_level = poison_active, poison_level
+  if human then
+    human.debug_slow, human.debug_focus, human.debug_override =
+      movement.human_slow, movement.focus, movement.human_speed_override
+  end
   state.last_debug_blind_alert, state.last_debug_overload_alert, state.last_debug_cap_alert =
     blind_alert, overload_alert, cap_alert
   state.last_debug_phase = plan.phase
@@ -309,6 +328,11 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
     -- callback's evidence advanced conservatively by the policy.
     movement.rescue_observed == true, movement.rescue_routes_total or 0,
     movement.rescue_routes_safe or 0, movement.rescue_known_ttc or -1,
+    movement.human_enabled == true, movement.human_pressure or 0, movement.human_slow == true,
+    movement.human_speed_held == true, movement.human_speed_override == true, movement.human_lane_cost or 0,
+    movement.poison_nav_active or 0, movement.poison_level or 0, movement.poison_risk or 0,
+    movement.poison_target_x or 0, movement.poison_target_y or 0,
+    movement.poison_probe_count or 0, movement.poison_nav_samples or 0, movement.poison_cost or 0,
   }
   for index = 1, #columns do values[index] = tostring(values[index] == nil and "" or values[index]) end
   debug_file:write(table.concat(values, ",") .. "\n")
@@ -408,6 +432,8 @@ function main()
   -- sendKeys(0) is repeated on every remaining frame. Only a fresh Lua session
   -- restarts the total deadline; transitions between rounds never extend it.
   if state.timed_out then
+    dodge.resetHuman(state)
+    dodge.resetPoison(state)
     keys.send(0, false)
     return
   end
@@ -417,6 +443,8 @@ function main()
   -- The alternative Charge mode swaps the meaning of held Z and Shift.
   -- Never apply Slow-mode movement/charging predictions to that layout.
   if ChargeType and ChargeType.Charge ~= nil and game_side.chargeType == ChargeType.Charge then
+    dodge.resetHuman(state)
+    dodge.resetPoison(state)
     keys.send(0, false)
     state.laser_history, state.last_move_key = nil, nil
     resetBloomPlanning()
@@ -431,6 +459,8 @@ function main()
   -- Native and Lua changes must be deployed together. Do not silently run
   -- the old, poison-blind policy if the read-only sensor cannot be verified.
   if not validSensor(player.sensor) or not validCharge(player) then
+    dodge.resetHuman(state)
+    dodge.resetPoison(state)
     keys.send(0, false)
     state.laser_history, state.last_move_key = nil, nil
     state.attention_set, state.attention_tokens, state.attention_config = nil, nil, nil
@@ -448,6 +478,8 @@ function main()
   -- surrounded it. life is the only exported health signal we trust here.
   state.hit = state.last_life ~= nil and player.life < state.last_life
   if state.hit then
+    dodge.resetHuman(state)
+    dodge.resetPoison(state)
     state.hits_total = (state.hits_total or 0) + 1
     state.round_hits = state.round_hits + 1
   end

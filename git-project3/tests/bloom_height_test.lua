@@ -4,6 +4,8 @@ ExAttackType = { Medicine = 16 }
 local dodge = dofile("dodge.lua")
 local function config()
   local cfg = dofile("config.lua").dodge
+  -- Isolate the original geometry/admission contract; 3.8 style has its own suite.
+  cfg.human_movement.enabled = false
   -- Altitude/geometry regression: the 3.1 attention limit is asserted in
   -- tests/attention_test.lua and disabled here so these checks keep describing
   -- the original dodge geometry.

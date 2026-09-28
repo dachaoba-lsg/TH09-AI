@@ -28,6 +28,12 @@ PROJECT = Path(__file__).resolve().parent.parent
 TESTS = PROJECT / "tests"
 HELPERS = {"upstream_hit_test.lua"}  # Returns a hitTest function, not a suite.
 OPTIONAL_BASELINE = re.compile(r'''(?:old_path|baseline_path)\s*=\s*["'](\.\./\.\./work/[^"']+)["']''')
+WHOLE_SUITE_BASELINES = {
+    "human_mech_integration_test.lua": (
+        "TH09_HUMAN_AI_BASELINE", "../../work/before-human-movement-3.8.0/src/ai"),
+    "poison_navigation_integration_test.lua": (
+        "TH09_POISON_AI_BASELINE", "../../work/before-poison-navigation-3.9.0/src/ai"),
+}
 
 
 def positive_int(value):
@@ -42,7 +48,27 @@ def baselines_for(script):
     for value in sorted(set(OPTIONAL_BASELINE.findall(script.read_text(encoding="utf-8-sig")))):
         path = (PROJECT / "src" / "ai" / value).resolve()
         rows.append({"path": path.relative_to(PROJECT).as_posix(), "available": path.is_file()})
+    whole_suite = WHOLE_SUITE_BASELINES.get(script.name)
+    if whole_suite:
+        variable, default = whole_suite
+        value = os.environ.get(variable) or default
+        path = (PROJECT / "src" / "ai" / value / "main.lua").resolve()
+        try:
+            display = path.relative_to(PROJECT).as_posix()
+        except ValueError:
+            display = str(path)
+        rows.append({"path": display, "available": path.is_file(),
+                     "whole_suite": True, "environment": variable})
     return rows
+
+
+def suite_status(name, code, output):
+    """A baseline-dependent suite may exit successfully without executing checks."""
+    if code:
+        return "failed", None
+    marker = re.compile(r"^" + re.escape(Path(name).stem) + r":\s*SKIP\b.*$", re.MULTILINE)
+    skipped = marker.search(output)
+    return ("skipped", skipped.group(0)) if skipped else ("passed", None)
 
 
 def main():
@@ -61,7 +87,8 @@ def main():
     for row in skipped:
         print(f"SKIP optional historical comparison: {row['suite']} -> {row['path']}", flush=True)
     if skipped:
-        print("Current-version checks will still run. Historical old-time columns of 0 mean unavailable, not measured.", flush=True)
+        print("Independent current-version checks still run; suites requiring missing historical snapshots report SKIP. "
+              "Historical old-time columns of 0 mean unavailable, not measured.", flush=True)
     if args.list:
         for script in scripts:
             print(script.relative_to(PROJECT).as_posix())
@@ -113,19 +140,28 @@ def main():
                 code = 125
                 output.write(f"\nFAIL: could not start helper: {error}\n")
         elapsed = round(time.perf_counter() - started, 3)
-        results.append({"suite": script.name, "exit_code": code, "elapsed_seconds": elapsed,
+        output_text = log.read_text(encoding="utf-8", errors="replace")
+        status, skip_reason = suite_status(script.name, code, output_text)
+        results.append({"suite": script.name, "exit_code": code, "status": status,
+                        "skip_reason": skip_reason, "elapsed_seconds": elapsed,
                         "log": log.relative_to(PROJECT).as_posix(), "optional_baselines": baseline_map[script.name]})
-        print(f"  {'PASS' if code == 0 else 'FAIL'} ({elapsed:.3f}s)", flush=True)
+        label = {"passed": "PASS", "failed": "FAIL", "skipped": "SKIP"}[status]
+        print(f"  {label} ({elapsed:.3f}s)", flush=True)
+        if skip_reason:
+            print("  " + skip_reason, flush=True)
         if code:
-            print("\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-12:]), flush=True)
+            print("\n".join(output_text.splitlines()[-12:]), flush=True)
 
-    failures = [row for row in results if row["exit_code"]]
+    failures = [row for row in results if row["status"] == "failed"]
+    skipped_suites = [row for row in results if row["status"] == "skipped"]
     summary = {"runtime": "Lupa 2.8 / native Lua 5.1 / 64-bit / no JIT", "suite_count": len(results),
-               "passed": len(results) - len(failures), "failed": len(failures),
+               "passed": len(results) - len(failures) - len(skipped_suites), "failed": len(failures),
+               "skipped_suites": len(skipped_suites),
                "old_iterations": args.old_iterations, "new_iterations": args.new_iterations,
                "optional_historical_comparisons_skipped": skipped, "results": results}
     (log_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Result: {summary['passed']}/{len(results)} suites passed; {len(failures)} failed; "
+          f"{len(skipped_suites)} whole suites skipped; "
           f"{len(skipped)} optional historical comparisons skipped.", flush=True)
     print(f"Logs: {log_dir}", flush=True)
     return 1 if failures else 0

@@ -60,13 +60,13 @@ end
 local header=split(output[1]);local index={}
 for i,name in ipairs(header)do index[name]=i end
 local expected={1,2,3,5,6,8,9,30}
-check(#header==197 and header[169]=='c1_seed_wait_age','CSV prefix/width changed')
+check(#header==211 and header[169]=='c1_seed_wait_age','CSV prefix/width changed')
 check(#output==#expected+1,'alert edges or periodic sample lost/duplicated')
 for i,f in ipairs(expected)do
   local row=split(output[i+1])
-  check(#row==197,'row width mismatch')
+  check(#row==211,'row width mismatch')
   check(tonumber(row[index.frame])==f,'unexpected sample frame')
-  check(row[index.ai_version]=='3.7.0-test','build identity missing')
+  check(row[index.ai_version]=='3.9.0-test','build identity missing')
   check(row[index.ai_side]=='1' and row[index.ai_character]=='13' and row[index.opponent_character]=='9','character/side identity incorrect')
   check(row[index.attention_plan_interval]=='6','runtime scan interval override not logged')
   check(row[index.charge_warmup_frames]=='7' and row[index.time_scale]=='1','charge timing missing')

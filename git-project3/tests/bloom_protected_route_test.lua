@@ -144,7 +144,10 @@ do
  local s=sensor();s.moveScaleX,s.moveScaleY=.4,.4
  s.poisonClouds={{x=0,y=320,radius=64,age=100,framesLeft=200,active=true}}
  local w=world({bullet(19.2,224,0,2)},s)
- local old=choose(w,false)
+ -- Force the historical rightward reference endpoint for this geometry
+ -- assertion. The actual protected choice below keeps 3.9 navigation on.
+ local reference=cfg();reference.poison_navigation.enabled=false
+ local old=dodge.choose(w,{},reference,intent(false))
  near(old.terminal_x,19.2,'poison fixture endpoint')
  local r=choose(w,true)
  check(r.protected_route_safe and r.name~='fast-right','nominal endpoint hid poisoned expiry hazard')

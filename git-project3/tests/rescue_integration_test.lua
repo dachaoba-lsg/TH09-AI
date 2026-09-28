@@ -140,7 +140,7 @@ local function startRescue(f)
   check(f.plan.rescue_state~='charging','first callback used future dodge feedback')
   eq(f.row.rescue_known_ttc,'-1','first callback invented previous-feedback timing')
   eq(f.row.rescue_route_ttc,'0','current route timing was not logged separately')
-  eq(#f.header,197,'rescue CSV width')
+  eq(#f.header,211,'rescue CSV width')
   eq(f.header[182],'time_scale','3.6.1 CSV prefix boundary changed')
   eq(f.header[183],'rescue_state','rescue columns must append after the existing prefix')
   for _=1,4 do

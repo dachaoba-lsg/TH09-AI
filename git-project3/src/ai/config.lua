@@ -107,6 +107,22 @@ return {
     -- Shared perception for dodge AND C resource/target selection. TH09's
     -- single playfield is 448 units high, independent of window scaling.
     vision_radius = 448 / 3,
+    -- 3.8 movement style only; no extra sight, attention credit or input rate.
+    -- main marks the resolved mech preset explicitly (even if attention is
+    -- manually re-enabled). All three preferences are bypassed for mech.
+    -- Timer values are game-time units, not measurements of human reactions.
+    human_movement = {
+      enabled = true,
+      enter_bullets = 12, exit_bullets = 7,
+      enter_frames = 3, exit_frames = 18, speed_hold_frames = 12,
+      corridor_margin = 12, corridor_weight = 18,
+    },
+    -- 3.9 low-poison terrain preference for EVERY difficulty, including mech.
+    -- This never grants sight or a safe long-range bullet route. Actual speed,
+    -- short-horizon collision checks and existing movement limits still win.
+    poison_navigation = {
+      enabled = true, risk_weight = 80, progress_weight = 6, replan_frames = 12,
+    },
     -- 3.1 human attention limit: a person can only keep a few incoming objects
     -- in mind at a time, and fast objects cost more attention than slow ones.
     -- Objects that are not admitted are invisible to the route search, so a

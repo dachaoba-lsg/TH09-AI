@@ -47,8 +47,8 @@ assert(#opened == 1, 'debug csv must still be created without a clock: ' .. tost
 assert(opened[1]:match('^ai_debug_custom%-%d+%.csv$'), 'expected the numbered fallback name, got ' .. tostring(opened[1]))
 assert(#output == 3 and #sent == 2, 'main loop did not run twice under the stripped host')
 local header = columns(output[1])
-assert(#header == 197, 'column count changed under the stripped host: ' .. tostring(#header))
+assert(#header == 211, 'column count changed under the stripped host: ' .. tostring(#header))
 assert(header[1] == 'frame' and header[134] == 'hits_total' and header[149] == 'c2_ready_updates'
-    and header[162] == 'attention_enabled' and header[169] == 'c1_seed_wait_age' and header[182] == 'time_scale' and header[#header] == 'rescue_route_ttc',
+    and header[162] == 'attention_enabled' and header[169] == 'c1_seed_wait_age' and header[182] == 'time_scale' and header[197] == 'rescue_route_ttc' and header[203] == 'human_lane_cost' and header[#header] == 'poison_cost',
   'unexpected header shape')
 print('PASS: stripped host environment (print/os.date/os.clock nil) still loads main.lua, writes a numbered debug csv and keeps running')

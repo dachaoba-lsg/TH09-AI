@@ -1,8 +1,11 @@
-DS-TH09-AI 3.7.0-test
+DS-TH09-AI 3.9.0-test
 
-Limited-perception defensive C2 preparation with native confirmation/recovery.
-Unchanged player menu, four ability budgets, input mappings and 3.6.1 security.
-unlimited defaults to plan_interval=1; other defaults use 6; explicit values win.
-CSV retains its original 182 columns and appends 15 rescue fields (197 total).
+All difficulty presets, including mech, prefer safer low-poison terrain.
+Poison navigation is a soft preference within existing short-term bullet safety,
+vision, height, movement and actual-protection constraints; escape is not guaranteed.
+The three 3.8 human-movement preferences still bypass mech entirely.
+Unchanged four settings, menu, default JSON, C strategy source and native security.
+Seven matched Lua modules include poison_navigation.lua in runtime and source.
+CSV preserves the 203-column 3.8 prefix and appends poison-navigation diagnostics.
 Public side=2 and side_key="". No private key is included.
-Offline validation is not a live-match acceptance or survival-time guarantee.
+Validation results belong to the delivery report, not a live-match guarantee.

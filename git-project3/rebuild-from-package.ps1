@@ -1,6 +1,6 @@
 ﻿param(
     [Parameter(Mandatory = $true)] [string] $CompilerPath,
-    [string] $Version = '3.7.0-test',
+    [string] $Version = '3.9.0-test',
     [switch] $Overwrite
 )
 $ErrorActionPreference = 'Stop'
@@ -39,6 +39,14 @@ foreach ($relative in $seedFiles) {
 }
 foreach ($required in @('build-native.ps1', 'build-package.ps1', 'build-public-package.ps1', 'PUBLIC-SOURCE-BUILD.md', 'LICENSE.txt', 'README.md')) {
     if (-not [IO.File]::Exists((Join-Path $sourceRoot $required))) { throw "Missing source build file: $required" }
+}
+# Check every Lua source module before compiling or creating a new stage.
+foreach ($name in @('config.lua', 'main.lua', 'dodge.lua', 'keyutils.lua',
+    'bloom.lua', 'bloom_observer.lua', 'poison_navigation.lua')) {
+    $path = Join-Path $sourceRoot ('src\ai\' + $name)
+    if (-not [IO.File]::Exists($path) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+        throw "Missing or empty required Lua source module: src/ai/$name"
+    }
 }
 $licenseSource = Join-Path $outerPackage 'licenses'
 foreach ($relative in @('THIRD_PARTY_NOTICES.txt', 'ka_ai_duka-readme-ja.txt',

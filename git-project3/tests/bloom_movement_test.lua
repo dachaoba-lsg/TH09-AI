@@ -4,6 +4,8 @@ ExAttackType = { Medicine = 16 }
 local dodge = dofile("dodge.lua")
 local function config()
   local cfg = dofile("config.lua").dodge
+  -- Isolate the original geometry/admission contract; 3.8 style has its own suite.
+  cfg.human_movement.enabled = false
   -- These assertions describe the original dodge geometry. The 3.1 attention
   -- limit changes which objects are scored at all, so it is disabled here the
   -- same way the 3.0 movement cap is disabled for the legacy audit below;

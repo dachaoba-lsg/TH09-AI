@@ -1,4 +1,4 @@
-param([string] $Version = '3.7.0-test', [switch] $Overwrite,
+param([string] $Version = '3.9.0-test', [switch] $Overwrite,
     [string] $PackageName = 'DS-TH09-AI', [string] $ZipBase = '')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid package version.' }
@@ -8,6 +8,14 @@ $dist = Join-Path $PSScriptRoot 'dist\TH09-AI'
 $zipPath = Join-Path $PSScriptRoot ('dist\' + $ZipBase + '-v' + $Version + '.zip')
 if ([IO.File]::Exists($zipPath) -and -not $Overwrite) {
     throw "Package already exists: $zipPath. Choose a new version or pass -Overwrite."
+}
+# All seven runtime modules must come from this source tree, not a stale stage.
+foreach ($name in @('config.lua', 'main.lua', 'dodge.lua', 'keyutils.lua',
+    'bloom.lua', 'bloom_observer.lua', 'poison_navigation.lua')) {
+    $path = Join-Path $PSScriptRoot ('src\ai\' + $name)
+    if (-not [IO.File]::Exists($path) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+        throw "Missing or empty required Lua module: src/ai/$name"
+    }
 }
 foreach ($file in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src\ai') -File) {
     Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dist ('ai\' + $file.Name)) -Force
@@ -36,13 +44,13 @@ $difficultyGuide = -join ([char[]]@(0x907F, 0x5F39, 0x96BE, 0x5EA6, 0x6321, 0x4F
 $allowedPaths = @(
     '^(README\.md|LICENSE\.txt|VERSION\.txt|launcher-settings\.json|prepare-and-start\.ps1|prepare-input\.ps1)$',
     '^(\u542f\u52a8TH09-AI\.cmd|\u4f7f\u7528\u8bf4\u660e\.txt|\u53d1\u5e03\u8bf4\u660e\.md)$',
-    '^ai/(config|main|dodge|keyutils|bloom|bloom_observer)\.lua$',
+    '^ai/(config|main|dodge|keyutils|bloom|bloom_observer|poison_navigation)\.lua$',
     '^runtime/(inject\.dll|ka_ai_duka\.exe|th09ai-launcher\.exe|window_support\.(dll|def)|SHA256SUMS\.txt)$',
     '^licenses/(THIRD_PARTY_NOTICES\.txt|boost-LICENSE_1_0\.txt|lua-5\.1\.4\.txt|thprac-MIT\.txt|ka_ai_duka-readme-ja\.txt)$',
     '^licenses/ka_ai_duka/(LICENSE|readme)\.txt$',
     '^licenses/tinycc/(COPYING|GPL-2\.0\.txt|tcc-0\.9\.27\.tar\.bz2)$',
     '^source/[A-Za-z0-9_-]+\.(md|ps1|txt)$',
-    '^source/src/ai/(config|main|dodge|keyutils|bloom|bloom_observer)\.lua$',
+    '^source/src/ai/(config|main|dodge|keyutils|bloom|bloom_observer|poison_navigation)\.lua$',
     '^source/src/launcher/(prepare-and-start\.ps1|prepare-input\.ps1|\u542f\u52a8TH09-AI\.cmd)$',
     '^source/src/native/[A-Za-z0-9_-]+\.(c|h|md)$',
     ('^' + $difficultyGuide + '\.md$'),

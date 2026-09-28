@@ -26,6 +26,7 @@ try {
     $difficultyGuide = -join ([char[]]@(0x907F, 0x5F39, 0x96BE, 0x5EA6, 0x6321, 0x4F4D))
     $required = @('README.md','LICENSE.txt','VERSION.txt','launcher-settings.json', ($difficultyGuide + '.md'),
         'set-difficulty.ps1','set-difficulty.cmd',
+        'ai/poison_navigation.lua','source/src/ai/poison_navigation.lua',
         'licenses/THIRD_PARTY_NOTICES.txt','licenses/ka_ai_duka/LICENSE.txt',
         'licenses/ka_ai_duka/readme.txt','licenses/lua-5.1.4.txt',
         'licenses/boost-LICENSE_1_0.txt','licenses/thprac-MIT.txt',
@@ -85,9 +86,11 @@ try {
         ForEach-Object { $_.FullName.Substring(($PackageName + '/ai/').Length) } | Sort-Object)
     $sourceLua = @($zip.Entries | Where-Object { $_.FullName -match ('^' + $PackageName + '/source/src/ai/[^/]+\.lua$') } |
         ForEach-Object { $_.FullName.Substring(($PackageName + '/source/src/ai/').Length) } | Sort-Object)
-    foreach ($file in @('main.lua','config.lua','dodge.lua','keyutils.lua','bloom.lua','bloom_observer.lua')) {
-        Check ($runtimeLua -contains $file) "Missing required bloom AI module: $file"
+    foreach ($file in @('main.lua','config.lua','dodge.lua','keyutils.lua','bloom.lua','bloom_observer.lua','poison_navigation.lua')) {
+        Check ($runtimeLua -contains $file) "Missing required AI module: $file"
     }
+    Check ($runtimeLua.Count -eq 7) 'Exactly seven runtime Lua modules are required.'
+    Check ($sourceLua.Count -eq 7) 'Exactly seven source Lua modules are required.'
     Check (($runtimeLua -join '|') -eq ($sourceLua -join '|')) 'Runtime/source Lua module inventories differ.'
     foreach ($file in $runtimeLua) {
         Check ((Entry-Hash ('ai/' + $file)) -eq (Entry-Hash ('source/src/ai/' + $file))) "AI source/runtime mismatch: $file"

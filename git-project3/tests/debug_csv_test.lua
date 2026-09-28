@@ -36,7 +36,7 @@ local function columns(line)
   return result
 end
 local header, first, second = columns(output[1]), columns(output[2]), columns(output[3])
-assert(#header == 197 and #first == 197 and #second == 197, 'CSV columns not aligned')
+assert(#header == 211 and #first == 211 and #second == 211, 'CSV columns not aligned')
 local map = {}; for index,name in ipairs(header) do map[name]=index end
 assert(tonumber(first[map.laser_count]) == 1, 'laser count missing from diagnostics')
 assert(tonumber(first[map.tracked_lasers]) == 0, 'first frame must not invent history')
@@ -115,9 +115,13 @@ assert(first[map.move_change_budget] == '6' and first[map.attention_capacity_con
   and first[map.attention_recovery_config] == '19', 'effective player settings missing')
 assert(header[162] == 'attention_enabled' and header[163] == 'c1_release_delay_updates'
   and header[169] == 'c1_seed_wait_age', '3.5 diagnostics changed the original CSV prefix')
-assert(first[map.ai_version] == '3.7.0-test' and tonumber(first[map.ai_side]) == 2, 'build/side metadata missing')
+assert(first[map.ai_version] == '3.9.0-test' and tonumber(first[map.ai_side]) == 2, 'build/side metadata missing')
 assert(tonumber(first[map.ai_character]) == -1 and tonumber(first[map.opponent_character]) == -1,
   'missing characters must remain unknown, not silently become Reimu')
 assert(tonumber(first[map.charge_speed]) == 10 and first[map.charge_warmup_frames] == ''
   and first[map.time_scale] == '', 'missing charge timing must not become invented zero timing')
-print('PASS: in-memory main-loop CSV integration, 197 matching columns, round/vision/C1/attention metadata, no X')
+assert(header[197] == 'rescue_route_ttc' and header[198] == 'human_enabled' and header[203] == 'human_lane_cost', '3.8 diagnostics must append after the 3.7 prefix')
+assert(first[map.human_enabled] == 'true' and tonumber(first[map.human_pressure]) ~= nil, 'human movement diagnostics missing')
+assert(header[204] == 'poison_nav_active' and header[211] == 'poison_cost', '3.9 poison diagnostics must append after the 3.8 prefix')
+assert(tonumber(first[map.poison_nav_active]) ~= nil and tonumber(first[map.poison_cost]) ~= nil, 'poison diagnostics missing')
+print('PASS: in-memory main-loop CSV integration, 211 matching columns, round/vision/C1/attention metadata, no X')

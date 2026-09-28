@@ -1,4 +1,5 @@
 local keys = dofile("keyutils.lua")
+local poison_navigation = dofile("poison_navigation.lua")
 local abs, min, max, sqrt = math.abs, math.min, math.max, math.sqrt
 local INF, DIAGONAL = math.huge, 1 / math.sqrt(2)
 local DIRECTIONS = {
@@ -373,6 +374,15 @@ local function unprotectedInterval(first, last, start, protected_until)
   return max(first, protected_until - start), last
 end
 
+-- A wider *preference* envelope, never a larger physical hitbox. It is
+-- evaluated only inside the existing admitted-object scoring passes. Actual
+-- protection clips this envelope just as it clips damaging contacts.
+local function corridorExposure(candidate, first, last, start, horizon, candidates)
+  first, last = unprotectedInterval(first, last, start, candidates.protected_until or 0)
+  candidate.human_lane_cost = (candidate.human_lane_cost or 0)
+    + exposure(first, last, start, horizon)
+end
+
 -- Record timing only where the existing scorer has already confirmed a hard,
 -- unprotected contact. This adds no object lookup or new geometric forecast.
 local function hardCollision(candidate, first, start)
@@ -478,6 +488,14 @@ local function dynamicLaser(player, body, motion, candidates, cfg, stats)
   -- Broad phase uses each future interval's complete swept shape, so a
   -- growing/rotating beam cannot be discarded using only its present bounds.
   local reach = candidates.reach
+  -- Only this scorer's broad phase widens; attention admission is unchanged.
+  -- Otherwise a known beam inside the corridor envelope but outside the old
+  -- near-miss envelope would be discarded before the soft preference pass.
+  if candidates.human_cfg then
+    -- Padding both local axes of a rotated rectangle can extend a world
+    -- axis by sqrt(2) times that padding (the 45-degree worst case).
+    reach = reach + max(0, candidates.human_cfg.corridor_margin - margin) * sqrt(2)
+  end
   local relevant = false
   for _, part in ipairs(intervals) do
     local duration = part.finish - part.start
@@ -495,6 +513,9 @@ local function dynamicLaser(player, body, motion, candidates, cfg, stats)
   if not relevant then return end
   stats.objects_relevant = stats.objects_relevant + 1
   if warning then stats.warning_lasers = stats.warning_lasers + 1 end
+  if candidates.human_cfg and not warning then
+    stats.human_pressure = (stats.human_pressure or 0) + 1
+  end
   for _, candidate in ipairs(candidates) do
     for _, segment in ipairs(candidate.segments) do
       for _, part in ipairs(intervals) do
@@ -528,6 +549,21 @@ local function dynamicLaser(player, body, motion, candidates, cfg, stats)
             else
               near_first, near_last = changingRectInterval(dx, dy, vx, vy,
                 part.hx + margin, hy + margin, length, part.dl, part.dhy, duration)
+            end
+          end
+          if candidates.human_cfg and not part.soft then
+            local pad = candidates.human_cfg.corridor_margin
+            local wide_first, wide_last
+            if fixed_bounds then
+              wide_first, wide_last = rectInterval(dx, dy, vx, vy,
+                -part.hx - pad, length + part.hx + pad, -hy - pad, hy + pad, duration)
+            else
+              wide_first, wide_last = changingRectInterval(dx, dy, vx, vy,
+                part.hx + pad, hy + pad, length, part.dl, part.dhy, duration)
+            end
+            if wide_first and first_time + wide_first < zero_height then
+              corridorExposure(candidate, wide_first, min(wide_last, zero_height - first_time),
+                first_time, horizon, candidates)
             end
           end
           if candidates.protected_until > 0 then
@@ -602,6 +638,9 @@ local function scoreObject(player, object, kind, candidates, cfg, stats, previou
   -- Scan every object. Swept bounds include bullet velocity and all candidate
   -- travel, so neither distant fast bullets nor late array entries get omitted.
   local reach = candidates.reach
+  if candidates.human_cfg then
+    reach = reach + max(0, candidates.human_cfg.corridor_margin - margin) * sqrt(2)
+  end
   local start_x, start_y = center_x, center_y
   if candidates.active_from and not warning then
     -- The stationary post-route safety pass cannot take damage before live
@@ -616,6 +655,9 @@ local function scoreObject(player, object, kind, candidates, cfg, stats, previou
     or min(start_y, end_y) - bound_y > player.y + reach then return end
   stats.objects_relevant = stats.objects_relevant + 1
   if warning then stats.warning_lasers = stats.warning_lasers + 1 end
+  if candidates.human_cfg and not warning and kind ~= "enemy" then
+    stats.human_pressure = (stats.human_pressure or 0) + 1
+  end
   for _, candidate in ipairs(candidates) do
     for _, segment in ipairs(candidate.segments) do
       stats.trajectory_tests = stats.trajectory_tests + 1
@@ -636,6 +678,17 @@ local function scoreObject(player, object, kind, candidates, cfg, stats, previou
           near_first, near_last = rectInterval(dx, dy, rvx, rvy, -half_x - margin, hi_x + margin,
             -half_y - margin, half_y + margin, segment.duration)
         end
+      end
+      if candidates.human_cfg and not warning then
+        local pad = candidates.human_cfg.corridor_margin
+        local wide_first, wide_last
+        if shape == HitType.Circle then
+          wide_first, wide_last = circleInterval(dx, dy, rvx, rvy, radius + pad, segment.duration)
+        else
+          wide_first, wide_last = rectInterval(dx, dy, rvx, rvy,
+            -half_x - pad, (length or 0) + half_x + pad, -half_y - pad, half_y + pad, segment.duration)
+        end
+        corridorExposure(candidate, wide_first, wide_last, segment.start, h, candidates)
       end
       if candidates.protected_until > 0 then
         scoreExposure(candidate, first, last, near_first, near_last, segment.start, h,
@@ -1072,6 +1125,161 @@ local function planAttention(player, game_side, cfg, a, state, reach)
   return result
 end
 
+local function resetHuman(state)
+  state.human_movement = nil
+end
+
+local function humanSettings(cfg, player, state)
+  local source = cfg.human_movement
+  -- Difficulty identity is independent of the attention.enabled override.
+  -- main resolves aliases/presets into source.mech; direct callers may use
+  -- attention.difficulty. Neither path changes any of the old mech settings.
+  if type(source) ~= "table" or source.enabled == false or source.mech == true
+    or (type(cfg.attention) == "table" and cfg.attention.difficulty == "mech") then
+    resetHuman(state)
+    return nil
+  end
+  local sensor = player.sensor or {}
+  if sensor.cutIn == true or sensor.timeScale == 0 or sensor.movementEnabled == false
+    or sensor.state == 4 or sensor.state == 5 or sensor.valid == false then
+    resetHuman(state)
+    return nil
+  end
+  local function setting(name, fallback, lo, hi)
+    return finite(source[name]) and clamp(source[name], lo, hi) or fallback
+  end
+  local out = {
+    enter_bullets = setting("enter_bullets", 12, 1, 256),
+    exit_bullets = setting("exit_bullets", 7, 0, 255),
+    enter_frames = setting("enter_frames", 3, 0, 120),
+    exit_frames = setting("exit_frames", 18, 0, 120),
+    speed_hold_frames = setting("speed_hold_frames", 12, 0, 120),
+    corridor_margin = setting("corridor_margin", 12, cfg.safety_margin, 32),
+    corridor_weight = setting("corridor_weight", 18, 0, 100),
+    elapsed = finite(sensor.timeScale) and clamp(sensor.timeScale, 0, 4) or 1,
+  }
+  out.exit_bullets = min(out.exit_bullets, out.enter_bullets - 1)
+  return out
+end
+
+-- Apply human preferences only to the final, physically eligible pool. A
+-- direction budget cannot be bypassed by picking a wider/slow route outside
+-- that pool. No known contact, extra near-miss danger or wall exposure can be
+-- purchased with this preference. All-colliding pools keep the old ranking.
+local function humanSelect(pool, best, state, hc, stats, player, cfg, intent, stay, last_direction)
+  local memory = state.human_movement or { slow = false, enter_age = 0, exit_age = 0 }
+  state.human_movement = memory
+  local pressure, dt = stats.human_pressure or 0, hc.elapsed
+  if memory.slow then
+    memory.exit_age = pressure <= hc.exit_bullets and memory.exit_age + dt or 0
+    if pressure <= hc.exit_bullets and memory.exit_age >= hc.exit_frames then
+      memory.slow, memory.enter_age, memory.exit_age = false, 0, 0
+    end
+  else
+    memory.enter_age = pressure >= hc.enter_bullets and memory.enter_age + dt or 0
+    if pressure >= hc.enter_bullets and memory.enter_age >= hc.enter_frames then
+      memory.slow, memory.enter_age, memory.exit_age = true, 0, 0
+    end
+  end
+  memory.hold_age = (memory.hold_age or hc.speed_hold_frames) + dt
+  local held, override = false, false
+  -- The old post-C2 planner deliberately suppresses resource intent when no
+  -- safe expiry endpoint exists. Preserve that immediate escape unchanged;
+  -- adding style must not resurrect an already rejected resource pursuit.
+  if not best.collides and (not stats.protected_route_checked or best.protected_route_safe) then
+    local accepted = {}
+    for _, candidate in ipairs(pool) do
+      if not candidate.collides and candidate.danger <= best.danger + 1e-9
+        and candidate.terrain_cost <= best.terrain_cost + 1e-9
+        and (not best.protected_route_safe or candidate.protected_route_usable) then
+        accepted[#accepted + 1] = candidate
+      end
+    end
+    local function matching(focus)
+      local subset = {}
+      for _, candidate in ipairs(accepted) do
+        if candidate.focus == focus then subset[#subset + 1] = candidate end
+      end
+      return subset
+    end
+    local preferred = accepted
+    if memory.output_focus ~= nil and memory.hold_age < hc.speed_hold_frames then
+      local same_speed = matching(memory.output_focus)
+      if #same_speed > 0 then preferred, held = same_speed, true
+      else override = true end
+    end
+    if not held and memory.slow then
+      local slow = matching(true)
+      if #slow > 0 then preferred = slow else override = true end
+    end
+    local selected, selected_score
+    for _, candidate in ipairs(preferred) do
+      local score = candidate.danger + candidate.position_cost
+      local direction = candidate.key - (intent and candidate.focus and keys.mask.shift or 0)
+      if stay.danger > 0 and last_direction ~= nil and direction ~= last_direction then
+        score = score + cfg.direction_change_cost
+      end
+      score = score + (candidate.human_lane_cost or 0) * hc.corridor_weight
+        + (intent and intentCost(candidate, player, cfg, intent) or 0)
+        + (best.protected_route_safe and candidate.protected_route_danger or 0)
+        + (candidate.poison_cost or 0)
+      if not selected_score or score < selected_score then selected, selected_score = candidate, score end
+    end
+    if selected then
+      best = selected
+      best.cost = selected_score
+      best.intent_cost = intent and intentCost(best, player, cfg, intent) or 0
+      best.protected_route_safe = stats.protected_route_checked and best.protected_route_usable == true
+      best.protected_route_collides = best.protected_route_collides == true
+      best.protected_route_danger = best.protected_route_danger or 0
+    end
+  elseif memory.output_focus ~= nil and best.focus ~= memory.output_focus then
+    override = true
+  end
+  if memory.output_focus == nil or best.focus ~= memory.output_focus then memory.hold_age = 0 end
+  memory.output_focus = best.focus
+  best.human_enabled, best.human_pressure, best.human_slow = true, pressure, memory.slow
+  best.human_speed_held, best.human_speed_override = held, override
+  best.human_lane_cost = best.human_lane_cost or 0
+  return best
+end
+
+-- The terrain-only preference is also available to mech. Reuse the original
+-- best as a strict safety ceiling; toxin avoidance cannot buy a collision,
+-- extra near-miss exposure, a worse wall route or a failed protection exit.
+-- Human tiers combine this cost inside their existing speed/hold selection,
+-- rather than having this pass silently override a held Shift mode.
+local function poisonSelect(pool, best, stats, player, cfg, intent, stay, last_direction)
+  if stats.poison_nav_active ~= 1 or best.collides
+    or (stats.protected_route_checked and not best.protected_route_safe) then return best end
+  local baseline = best
+  local function score(candidate)
+    local value = candidate.danger + candidate.position_cost
+    local direction = candidate.key - (intent and candidate.focus and keys.mask.shift or 0)
+    if stay.danger > 0 and last_direction ~= nil and direction ~= last_direction then
+      value = value + cfg.direction_change_cost
+    end
+    return value + (intent and intentCost(candidate, player, cfg, intent) or 0)
+      + (baseline.protected_route_safe and candidate.protected_route_danger or 0)
+      + (candidate.poison_cost or 0)
+  end
+  local best_score = score(best)
+  for _, candidate in ipairs(pool) do
+    if not candidate.collides and candidate.danger <= baseline.danger + 1e-9
+      and candidate.terrain_cost <= baseline.terrain_cost + 1e-9
+      and (not baseline.protected_route_safe or candidate.protected_route_usable) then
+      local candidate_score = score(candidate)
+      if candidate_score < best_score then best, best_score = candidate, candidate_score end
+    end
+  end
+  best.cost = best_score
+  best.intent_cost = intent and intentCost(best, player, cfg, intent) or 0
+  best.protected_route_safe = stats.protected_route_checked and best.protected_route_usable == true
+  best.protected_route_collides = best.protected_route_collides == true
+  best.protected_route_danger = best.protected_route_danger or 0
+  return best
+end
+
 local function choose(game_side, state, cfg, intent)
   if type(intent) ~= "table" then intent = nil end
   -- Keep this boundary even when attention is disabled or a caller bypasses
@@ -1079,6 +1287,7 @@ local function choose(game_side, state, cfg, intent)
   -- no marker supplied by the native host is trusted to bypass hard sight.
   game_side = perceive(game_side, cfg)
   local player = game_side.player
+  local hc = humanSettings(cfg, player, state)
   local stats = { warning_lasers = 0, objects_seen = 0, objects_relevant = 0, trajectory_tests = 0,
     laser_count = 0, tracked_lasers = 0, dynamic_lasers = 0, laser_sweep_tests = 0, laser_history_resets = 0,
     sensor_valid = 0, poison_clouds = 0, movement_segments = 0, protection_frames = 0,
@@ -1095,6 +1304,7 @@ local function choose(game_side, state, cfg, intent)
   local model = movementModel(player, cfg, stats)
   local candidates = buildCandidates(player, cfg, model, stats, intent)
   candidates = heightCandidates(candidates, player, cfg, intent, stats)
+  candidates.human_cfg = hc
   local frame = state.frame or ((state.laser_frame or 0) + 1)
   local previous_lasers, next_lasers = state.laser_history or {}, {}
   -- 3.1 attention limit decides which incoming objects this callback can see.
@@ -1144,6 +1354,9 @@ local function choose(game_side, state, cfg, intent)
   end
   state.laser_history, state.laser_frame = next_lasers, frame
   protectedRoutes(game_side, candidates, cfg, intent, stats, previous_lasers, frame)
+  -- game_side/player already contain only the shared current-circle snapshot.
+  -- Terrain probes never add objects to the attention or collision passes.
+  poison_navigation.score(player, candidates, state, cfg, stats, frame, intent)
   local stay = candidates[1]
   local last_direction = state.last_move_key
   if intent and last_direction ~= nil then
@@ -1256,6 +1469,11 @@ local function choose(game_side, state, cfg, intent)
       eligible_pool = restricted
     end
   end
+  if hc then
+    best = humanSelect(eligible_pool, best, state, hc, stats, player, cfg, intent, stay, last_direction)
+  else
+    best = poisonSelect(eligible_pool, best, stats, player, cfg, intent, stay, last_direction)
+  end
   recordMove(state, best.vx, best.vy, stay.danger > 0)
   state.last_move_key = best.key
   best.move_changes = state.move_changes or 0
@@ -1294,5 +1512,6 @@ local function choose(game_side, state, cfg, intent)
   return best
 end
 
-return { choose = choose, perceive = perceive, rectInterval = rectInterval, circleInterval = circleInterval,
+return { choose = choose, perceive = perceive, resetHuman = resetHuman,
+  resetPoison = poison_navigation.reset, rectInterval = rectInterval, circleInterval = circleInterval,
   changingRectInterval = changingRectInterval }

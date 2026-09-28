@@ -7,6 +7,8 @@ local dodge = dofile("dodge.lua")
 local checks, cases = 0, 0
 local diagnostic = { rescue_observed = true, rescue_routes_total = true,
   rescue_routes_safe = true, rescue_known_ttc = true }
+
+for _,name in ipairs({"poison_cost","poison_nav_active","poison_level","poison_risk","poison_target_x","poison_target_y","poison_probe_count","poison_nav_samples"}) do diagnostic[name]=true end
 local function check(value, message)
   checks = checks + 1
   assert(value, message)
@@ -22,6 +24,9 @@ local function test(name, run)
 end
 local function config(attention)
   local cfg = dofile("config.lua").dodge
+  -- Isolate the original geometry/admission contract; 3.8 style has its own suite.
+  cfg.human_movement.enabled = false
+  cfg.poison_navigation.enabled = false
   cfg.attention.enabled = attention == true
   cfg.attention.tracked_threat, cfg.attention.threat_per_second = 120, 90
   cfg.attention.plan_interval = 1

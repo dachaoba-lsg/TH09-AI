@@ -1,5 +1,5 @@
 ﻿param(
-    [string] $Version = '3.7.0-test',
+    [string] $Version = '3.9.0-test',
     [switch] $Overwrite,
     [string] $PackageName = 'DS-TH09-AI',
     [string] $ZipBase = ''
@@ -57,7 +57,7 @@ foreach ($relative in @('src\ai', 'src\launcher', 'src\native')) {
     }
 }
 foreach ($required in @('src\ai\main.lua', 'src\ai\config.lua', 'src\ai\dodge.lua', 'src\ai\keyutils.lua',
-    'src\ai\bloom.lua', 'src\ai\bloom_observer.lua',
+    'src\ai\bloom.lua', 'src\ai\bloom_observer.lua', 'src\ai\poison_navigation.lua',
     'src\launcher\prepare-and-start.ps1', 'src\launcher\prepare-input.ps1',
     'src\native\launcher.c', 'src\native\window_support.c', 'src\native\window_resize.c',
     'src\native\window_resize.h', 'src\native\window_resize_selftest.c', 'src\native\input_patches.h',
@@ -70,6 +70,9 @@ foreach ($required in @('src\ai\main.lua', 'src\ai\config.lua', 'src\ai\dodge.lu
     'src\native\enemy_sensor.c', 'src\native\enemy_sensor.h', 'src\native\enemy_sensor_selftest.c',
     'src\native\player_sensor.h', 'src\native\player_sensor_selftest.c', 'src\native\README.md')) {
     if (-not $files.Contains($required)) { throw "Missing required source file: $required" }
+}
+if (@($files | Where-Object { $_ -like 'src\ai\*.lua' }).Count -ne 7) {
+    throw 'Exactly seven reviewed Lua source modules are required.'
 }
 if (@($files | Where-Object { $_ -like 'src\launcher\*.cmd' }).Count -ne 1) {
     throw 'Exactly one launcher CMD source is required.'

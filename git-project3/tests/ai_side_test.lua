@@ -108,13 +108,13 @@ local function fixture(selected, seconds)
   end
   real_dofile('main.lua')
   local header = split(f.output[1])
-  eq(#header, 197, '3.6 appends metadata after the 169 original columns')
+  eq(#header, 211, '3.6 appends metadata after the 169 original columns')
   function f.step()
     local rows = #f.output
     main()
     if #f.output == rows then return nil end
     local values, result = split(f.output[#f.output]), {}
-    eq(#values, 197, 'CSV row width')
+    eq(#values, 211, 'CSV row width')
     for index, name in ipairs(header) do result[name] = values[index] end
     return result
   end
@@ -129,7 +129,7 @@ for selected = 1, 2 do
   eq(row.life, '10', 'own life must reach diagnostics')
   eq(row.spell_point, '12345', 'own score must reach diagnostics')
   eq(row.max_charge, '400', 'own gauge must reach diagnostics')
-  eq(row.ai_version, '3.7.0-test', 'diagnostic version must identify the running code')
+  eq(row.ai_version, '3.9.0-test', 'diagnostic version must identify the running code')
   eq(tonumber(row.ai_side), selected, 'diagnostic side must follow the actual selected side')
   eq(row.ai_character, '13', 'AI character must come from the selected upstream player')
   eq(row.opponent_character, '9', 'opponent character must come from the opposite player')
