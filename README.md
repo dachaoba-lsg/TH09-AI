@@ -79,15 +79,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 ~~~~
 
-通过网盘分享的文件：TH09-AI-v2.0.7.zip
-
-链接: https://pan.baidu.com/s/1zoS6kLFy-KW37IbJk3fTjg?pwd=ujwb 提取码: ujwb 
-
+通过网盘分享的文件：TH09-AI-v2.0.8.zip
+链接: https://pan.baidu.com/s/1LxlH4qdKtnbEEYoEe_PPhQ?pwd=bbj7 提取码: bbj7 
 --来自百度网盘超级会员v3的分享
 
 
 
-版本：2.0.7。AI去除停枪，随机C行为，主动打连爆，主动放C2，可以成为开花机练习器
+版本：2.0.8。AI去除停枪，随机C行为，主动打连爆，主动放C2，可以成为开花机练习器 对毒优化
 
 ~~~~
 通过网盘分享的文件：3.9包.zip
