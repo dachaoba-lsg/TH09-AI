@@ -32,18 +32,50 @@ function Get-Sha256Hex([string] $path) {
 }
 
 function Test-AiSideKey($candidate) {
-  # This convenience gate stores only a digest. Never emit the candidate or
-  # forward it into the generated native/Lua settings.
-  if ($candidate -isnot [string]) { return $false }
-  $sha256 = [Security.Cryptography.SHA256]::Create()
+  # Local configuration gate, not a protection against modified source.
+  # Verify only the rotated key: no legacy fast-hash fallback. The public
+  # versioned record contains a random salt and verifier, never the key.
+  if ($candidate -isnot [string] -or $candidate.Length -lt 1 -or $candidate.Length -gt 256) { return $false }
+  # Environment transport cannot carry NUL; HMAC zero padding would also make
+  # trailing NULs equivalent for short keys. Reject them at both boundaries.
+  if ($candidate.IndexOf([char]0) -ge 0) { return $false }
+  $record = 'v1$pbkdf2-sha256$600000$uAp300Qa5qSSxWG6EO+2Bg==$t+ToF+/7yLK+4DFk3jcFCtdQCoZMjAz7K34nAMN33CI='
+  $kdf = $null
+  $keyBytes = $null
+  $derived = $null
+  $expected = $null
+  $salt = $null
   try {
+    $parts = $record.Split([char]'$')
+    # Pin this format's cost and algorithm; malformed/unknown records fail
+    # closed rather than silently choosing .NET's legacy SHA1 defaults.
+    if ($parts.Length -ne 5 -or $parts[0] -cne 'v1' -or $parts[1] -cne 'pbkdf2-sha256' -or $parts[2] -cne '600000') { return $false }
+    $salt = [Convert]::FromBase64String($parts[3])
+    $expected = [Convert]::FromBase64String($parts[4])
+    if ($salt.Length -ne 16 -or $expected.Length -ne 32) { return $false }
     $utf8 = New-Object Text.UTF8Encoding($false, $true)
-    $digest = [BitConverter]::ToString($sha256.ComputeHash($utf8.GetBytes($candidate))).Replace('-', '').ToLowerInvariant()
-    return $digest -ceq '82410b1bd4d8eeee2897f9c69b45a88bddab8bafa29881218f42c8c0b628c19e'
+    $keyBytes = $utf8.GetBytes($candidate)
+    if ($keyBytes.Length -gt 1024) { return $false }
+    # This explicit SHA256 overload needs .NET Framework 4.7.2 or newer.
+    # An unavailable API or crypto failure follows the same 2P fallback.
+    $kdf = [Security.Cryptography.Rfc2898DeriveBytes]::new($keyBytes, $salt, 600000, [Security.Cryptography.HashAlgorithmName]::SHA256)
+    $derived = $kdf.GetBytes(32)
+    # Framework 4.x lacks CryptographicOperations.FixedTimeEquals. Always
+    # inspect all 32 bytes, with no content-dependent early-return branch.
+    # PowerShell is not a hard real-time/constant-time execution environment.
+    $difference = 0
+    for ($i = 0; $i -lt 32; $i++) {
+      $difference = $difference -bor ([int]$derived[$i] -bxor [int]$expected[$i])
+    }
+    return $difference -eq 0
   } catch {
+    # Never emit exception details: method/encoding errors may include input.
     return $false
   } finally {
-    $sha256.Dispose()
+    if ($null -ne $kdf) { $kdf.Dispose() }
+    foreach ($buffer in @($keyBytes, $derived, $expected, $salt)) {
+      if ($null -ne $buffer) { [Array]::Clear($buffer, 0, $buffer.Length) }
+    }
   }
 }
 
@@ -71,7 +103,7 @@ $actualSha256 = Get-Sha256Hex $gameExe
 if ($actualSha256 -ne '10350095BCF95EDB59E03BEE9849A2DC8A7714B4927AD5909C569C550FCE6822') {
   Stop-WithMessage "游戏版本不匹配，只支持已验证的日文版TH09 v1.50a。SHA256: $actualSha256" 6
 }
-if ((Get-Sha256Hex $injectDll) -ne '2BA67F1F80EBE53F978DC6843777764B5EAD911A688C89C9CD68CC8C2D9CAE00') {
+if ((Get-Sha256Hex $injectDll) -ne '3F7499B450787EBD603FBA73F31528CB852D16CD430A6395F5C38759CEDEF376') {
   Stop-WithMessage 'AI运行库版本不匹配，请使用完整发布包。' 9
 }
 Write-Host "游戏目录：$gameRoot"
@@ -247,6 +279,18 @@ Write-Host "键位保持：1P方向键/Z/X/Shift，2P WASD/J/K/L；请将 ${aiSi
 Write-Host "AI操作时限：$seconds 秒（0=不限时）；1P不掉血=$noDamage，无敌=$invincible。"
 Write-Host "AI注意力预设：$aiDifficulty（旧挡位名保留，暂停按存活秒数标定；双击 set-difficulty.cmd 可设置注意力、视野和避弹变向上限）"
 Push-Location -LiteralPath $runtimeRoot
-try { & $launcherExe $gameExe; $launcherExit = $LASTEXITCODE }
-finally { Pop-Location }
+# The native launcher AND support DLL independently verify this input. Never
+# pass an "authorized" flag, a public verifier, the key in argv, or a key file.
+$previousNativeKey = [Environment]::GetEnvironmentVariable('TH09_AI_SIDE_KEY', 'Process')
+try {
+  $nativeKey = if ($aiSide -eq 1) { $settings.ai.side_key } else { $null }
+  [Environment]::SetEnvironmentVariable('TH09_AI_SIDE_KEY', $nativeKey, 'Process')
+  & $launcherExe $gameExe
+  $launcherExit = $LASTEXITCODE
+} finally {
+  [Environment]::SetEnvironmentVariable('TH09_AI_SIDE_KEY', $previousNativeKey, 'Process')
+  $nativeKey = $null
+  $previousNativeKey = $null
+  Pop-Location
+}
 exit $launcherExit

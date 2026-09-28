@@ -1,6 +1,7 @@
 -- Deterministic bloom policy. All geometry/score thresholds below are planning
 -- heuristics, NOT verified blast radii or a formula for guaranteed energy.
--- This module never receives dodge danger as an attack trigger.
+-- Resource attacks use observer geometry. Rescue C2 uses only prior-callback
+-- perceived route/attention feedback; unidentified projectile TTC is forbidden.
 local M = {}
 local abs, max, min = math.abs, math.max, math.min
 
@@ -43,6 +44,9 @@ M.defaults = {
   -- Attention-overload pressure (dodge.attention) uses the same escape path:
   -- consecutive overloaded callbacks before the policy answers with a charge.
   attention_escape_frames = 6, attention_pressure_max = 30, attention_pressure_decay = 1,
+  rescue_pressure_frames = 3, rescue_credit_fraction = 0.2, rescue_safe_routes = 2,
+  rescue_prepare_margin_frames = 12, rescue_release_margin_frames = 2,
+  rescue_confirm_frames = 8, rescue_cooldown_frames = 90, rescue_charge_timeout_frames = 180,
   capture_approach_frames = 60, followup_confirm_frames = 8,
   protected_focus_fast_min_frames = 24,
   c1_return_advantage = 1.25,
@@ -180,6 +184,16 @@ end
 -- Count ACTUAL Shift output, including focus required by the dodge planner.
 -- This prevents a new capture window immediately after defensive slow motion.
 function M.feedback(state, movement, cfg)
+  -- Consume once on the next update. A paused/invalid frame must not leave an
+  -- old threat latched as fresh evidence after a cut-in or a hit recovery.
+  if movement.rescue_observed == true and not state.paused and not state.rescue_block_feedback then
+    state.rescue_feedback = {
+      total=number(movement.rescue_routes_total), safe=number(movement.rescue_routes_safe),
+      ttc=number(movement.rescue_known_ttc, -1),
+      load=number(movement.attention_load), budget=number(movement.attention_budget),
+      credit=number(movement.attention_credit), skipped=number(movement.attention_skipped),
+    }
+  else state.rescue_feedback = nil end
   -- Movement-cap pressure is feedback from the dodge planner, so it is tracked
   -- even while paused; only the resource planning below is pause-gated.
   if movement.move_cap_forced then
@@ -228,7 +242,7 @@ local function updateRecovery(state, player, cfg)
   end
   -- Feedback is measured over the whole post-release window, not attributed
   -- exclusively to C2. A missed refill raises the NEXT resource requirement;
-  -- no role is switched to an emergency/non-bloom strategy.
+  -- the rescue lock separately requires observed relief or replacement stock.
   if cycle.age >= setting(cfg, 'recharge_observe_frames') or cycle.ready then
     state.last_cycle_ready = cycle.ready == true
     state.last_cycle_gain = cycle.gain
@@ -321,7 +335,13 @@ local function result(state, intent, press, phase, reason)
     prepare_locked = state.prepare_ids ~= nil,
     followup_confirmed = state.followup ~= nil,
     followup_z_requests = state.followup_z_requests or 0,
-    followup_protection = state.followup_protection or 0 }
+    followup_protection = state.followup_protection or 0,
+    rescue_state = state.rescue_state or 'idle', rescue_reason = state.rescue_reason or '',
+    rescue_pressure = state.rescue_pressure or 0, rescue_age = state.rescue_age or 0,
+    rescue_ready_updates = state.rescue_ready_updates or -1,
+    rescue_known_ttc = state.rescue_known_ttc or -1, rescue_late = state.rescue_late == true,
+    rescue_cooldown = state.rescue_cooldown or 0, rescue_confirmed = state.rescue_confirmed == true,
+    rescue_attempts = state.rescue_attempts or 0, rescue_releases = state.rescue_releases or 0 }
 end
 
 -- Requests do not grant protection. Associate an actual charge reset and a
@@ -382,7 +402,7 @@ end
 -- 3.0 bloom (energy) mode. Recorded PVP play keeps a C2 rhythm of one release
 -- every ~3-5 s while the own field is dense, converting bullets into energy
 -- instead of pure dodging. This module only changes WHEN the already-authorized
--- C1/C2 plan releases; it never fires on danger and never uses X. The opponent
+-- C1/C2 resource plan releases; rescue timing is handled below and never uses X. The opponent
 -- gauge is a read-only native sub-snapshot: a missing/invalid opponent reading
 -- changes nothing except the optional early-entry relaxation.
 local function bloomPressure(obs)
@@ -596,7 +616,166 @@ local function release(state, intent, energy, level, cfg, reason)
   if not state.cycle or level == 2 or state.cycle.level ~= 2 then
     state.cycle = { level = level, age = 0, minimum = energy, gain = 0 }
   end
+  if state.rescue_state == 'charging' then
+    state.rescue_state, state.rescue_age = level == 2 and 'await_confirm' or 'cooldown', 0
+    state.rescue_release_stock, state.rescue_min_stock = energy, energy
+    state.rescue_confirmed = false
+    state.rescue_low_age, state.rescue_pressure, state.rescue_armed = 0, 0, false
+    state.rescue_cooldown = setting(cfg, 'rescue_cooldown_frames')
+    if level == 2 then state.rescue_releases = (state.rescue_releases or 0) + 1 end
+  end
   return result(state, intent, false, 'release', reason or ('release_c' .. level))
+end
+
+local function clearRescueEvidence(state)
+  state.rescue_feedback, state.rescue_pressure, state.rescue_low_age = nil, nil, nil
+  state.rescue_known_ttc, state.rescue_late = nil, nil
+  state.rescue_block_feedback = true
+end
+
+local function interruptRescue(state, cfg, reason)
+  clearRescueEvidence(state)
+  if state.rescue_state then
+    state.rescue_state, state.rescue_reason, state.rescue_age = 'cooldown', reason, 0
+    state.rescue_cooldown = setting(cfg, 'rescue_cooldown_frames')
+    state.rescue_confirmed, state.rescue_armed = false, false
+  end
+end
+
+-- This is a reason/lock on the existing charge -> release -> recover pipeline,
+-- not another input controller. It cannot see blind projectile coordinates.
+local function updateRescue(state, p, sensor, cfg)
+  local feedback = state.rescue_feedback
+  state.rescue_feedback = nil
+  local protected = sensor.valid == true and sensor.state == 3
+    and max(0, math.floor(number(sensor.protectionFrames)) - 1) > 0
+  state.rescue_block_feedback = sensor.valid ~= true or protected
+  if not feedback and not state.rescue_state then return false end
+  state.rescue_state = state.rescue_state or 'idle'
+  state.rescue_ready_updates = state.c2_ready_updates
+  state.rescue_cooldown = max(0, number(state.rescue_cooldown) - state.update_elapsed)
+  -- Dodge predicts in game-time units; readiness is in callbacks. Consume the
+  -- elapsed game update and convert with the currently observed timeScale.
+  state.rescue_known_ttc = feedback and feedback.ttc >= 0 and state.update_elapsed > 0
+    and max(0, (feedback.ttc - state.update_elapsed) / state.update_elapsed) or -1
+  state.rescue_late = state.rescue_known_ttc >= 0 and state.c2_ready_updates >= 0
+    and state.rescue_known_ttc <= state.c2_ready_updates + setting(cfg, 'rescue_release_margin_frames')
+  if state.rescue_state == 'await_confirm' then
+    state.rescue_age = number(state.rescue_age) + state.update_elapsed
+    -- Followup itself requires a real charge reset and newly observed native
+    -- protection/action or wave. Merely releasing Z never confirms safety.
+    if state.followup and number(p.currentCharge) < 100 then
+      state.rescue_state, state.rescue_reason = 'recover', 'release_confirmed'
+      state.rescue_confirmed, state.rescue_age = true, 0
+    elseif state.rescue_age >= setting(cfg, 'rescue_confirm_frames') then
+      state.rescue_state, state.rescue_reason = 'cooldown', 'release_unconfirmed'
+      state.rescue_cooldown = setting(cfg, 'rescue_cooldown_frames')
+    end
+  elseif state.rescue_state == 'charging' then
+    state.rescue_age = number(state.rescue_age) + state.update_elapsed
+  end
+  if state.rescue_release_stock then
+    state.rescue_min_stock = min(number(state.rescue_min_stock, state.rescue_release_stock),
+      number(p.currentChargeMax))
+  end
+  if state.rescue_block_feedback then
+    state.rescue_pressure, state.rescue_low_age = 0, 0
+    return false
+  end
+  -- Absence of a fresh observation is not proof of safety or a new trigger.
+  if not feedback then state.rescue_pressure = 0; return false end
+  local coarse = feedback.budget > 0 and feedback.load >= feedback.budget
+    and feedback.credit <= feedback.budget * min(1, setting(cfg, 'rescue_credit_fraction'))
+    and feedback.skipped > 0
+  local horizon = state.c2_ready_updates >= 0 and state.c2_ready_updates
+    + setting(cfg, 'rescue_release_margin_frames') + setting(cfg, 'rescue_prepare_margin_frames') or 0
+  -- A selected safe route has no collision TTC by definition. Shrinking
+  -- options are therefore a separate coarse signal: most actually eligible
+  -- routes are blocked, with only one/two safe alternatives left. A cap pool
+  -- of one/two entirely safe choices is not evidence of such narrowing.
+  local narrow = feedback.total >= 3 and feedback.safe > 0
+    and feedback.safe <= setting(cfg, 'rescue_safe_routes') and feedback.safe * 3 <= feedback.total
+  local urgent_route = feedback.total > 0 and feedback.safe == 0
+    and state.rescue_known_ttc >= 0 and state.rescue_known_ttc <= horizon
+  local route = narrow or urgent_route
+  local pressure = coarse or route
+  state.rescue_pressure = pressure and min(setting(cfg, 'rescue_pressure_frames'),
+    number(state.rescue_pressure) + 1) or 0
+  state.rescue_low_age = pressure and 0 or number(state.rescue_low_age) + 1
+  if state.rescue_armed == nil then state.rescue_armed = true end
+  -- Repeat rescue must either see pressure subside, or observe replacement of
+  -- the actual stock spent by a confirmed release. No speculative C2 revenue.
+  if (state.rescue_state == 'recover' or state.rescue_state == 'cooldown')
+      and (state.rescue_low_age >= setting(cfg, 'rescue_pressure_frames')
+      or (state.rescue_confirmed and state.rescue_release_stock
+        and state.rescue_min_stock < state.rescue_release_stock
+        and number(p.currentChargeMax) >= state.rescue_release_stock)) then
+    state.rescue_armed = true
+  end
+  if state.rescue_state == 'recover' or state.rescue_state == 'cooldown' then
+    if state.rescue_cooldown <= 0 and state.rescue_armed then state.rescue_state = 'idle' end
+  end
+  if state.rescue_state ~= 'idle' or not state.rescue_armed or state.rescue_cooldown > 0 then return false end
+  if not urgent_route and state.rescue_pressure < max(1, setting(cfg, 'rescue_pressure_frames')) then return false end
+  if number(p.currentChargeMax) < 200 or sensor.canCharge ~= true or sensor.c1ActionActive == true
+      or state.c2_ready_updates < 0 or number(p.chargeSpeed) >= 100 then return false end
+  -- A stale >=100 snapshot cannot be adopted as our fresh charge. Existing
+  -- held C1 may be promoted only when its own reset has already been observed.
+  if number(p.currentCharge) >= 100 and not (state.target_level and state.fresh_charge
+      and state.press_z == true) then return false end
+  state.rescue_reason = route and (urgent_route and 'known_route_blocked' or 'known_routes_narrow')
+    or 'attention_budget_low'
+  return true
+end
+
+local function applyRescue(state, intent, p, sensor, cfg, requested)
+  if requested then
+    if not state.target_level then beginCharge(state, intent, number(p.currentCharge), 2, {}, false) end
+    endReserve(state, 'rescue_promoted_c2')
+    clearRefillEvidence(state)
+    clearPreparation(state)
+    state.target_level, state.cadence_charge, state.attack_ids = 2, nil, nil
+    state.c1_profile_charge, state.c1_resource_charge, state.c1_seed_ids, state.c1_lost_age = nil, nil, nil, nil
+    state.rescue_state, state.rescue_age, state.rescue_armed = 'charging', 0, false
+    state.rescue_confirmed = false
+    state.rescue_attempts = (state.rescue_attempts or 0) + 1
+  end
+  if state.rescue_state == 'await_confirm' then
+    return result(state, intent, false, 'recover', 'rescue_await_confirm')
+  end
+  if state.rescue_state ~= 'charging' then return nil end
+  -- Keep dodge focus available, but do not chase an energy seed during rescue.
+  state.focus, intent.focus = false, false
+  intent.target_x, intent.target_y = number(p.x), number(p.y)
+  intent.approach_capture, intent.capture_potential = false, false
+  local charged, energy = number(p.currentCharge), number(p.currentChargeMax)
+  if charged < 100 then state.fresh_charge = true end
+  local timeout = state.rescue_age >= setting(cfg, 'rescue_charge_timeout_frames')
+  if sensor.valid ~= true or sensor.canCharge ~= true or sensor.c1ActionActive == true then
+    if timeout or energy < 200 then
+      -- Stop issuing hold after a bounded blocked plan. If charge was already
+      -- mature, dropping Z may be interpreted by the engine as an attack;
+      -- do not report either a confirmed release or a harmless cancellation.
+      state.target_level, state.fresh_charge, state.attack_ids, state.cadence_charge = nil, nil, nil, nil
+      state.rescue_reason = timeout and 'charge_gate_timeout' or 'charge_gate_stock_lost'
+      state.rescue_state, state.rescue_cooldown = 'cooldown', setting(cfg, 'rescue_cooldown_frames')
+      return result(state, intent, false, 'recover', 'rescue_stop_' .. state.rescue_reason)
+    end
+    return result(state, intent, true, 'charge', 'rescue_charge_gate')
+  end
+  if state.fresh_charge and charged >= 200 then
+    return release(state, intent, energy, 2, cfg, 'rescue_release_c2')
+  end
+  if energy < 200 or timeout then
+    state.rescue_reason = timeout and 'charge_timeout' or 'stock_lost'
+    if state.fresh_charge and charged >= 100 then
+      return release(state, intent, energy, 1, cfg, 'rescue_end_c1_' .. state.rescue_reason)
+    end
+    state.target_level, state.fresh_charge, state.attack_ids = nil, nil, nil
+    state.rescue_state, state.rescue_cooldown = 'cooldown', setting(cfg, 'rescue_cooldown_frames')
+    return result(state, intent, false, 'recover', 'rescue_cancel_' .. state.rescue_reason)
+  end
+  return result(state, intent, true, 'charge', 'rescue_prepare_c2')
 end
 
 local function reserveC2(state, p, obs, cfg, safe)
@@ -683,6 +862,7 @@ function M.update(game_side, state, cfg, obs)
   -- 180-second bloom-entry rule is match time, not wall-clock time.
   state.battle_time = (state.battle_time or 0) + elapsed
   if state.last_life and number(p.life) < state.last_life then
+    interruptRescue(state, cfg, 'hit')
     endReserve(state, 'hit')
     clearRefillEvidence(state)
     -- A hit interrupts our command plan. Do not replay a pre-hit release.
@@ -698,6 +878,7 @@ function M.update(game_side, state, cfg, obs)
   state.last_life = number(p.life)
   local recovering = sensor.state ~= nil and sensor.state ~= 0 and sensor.state ~= 3
   if recovering then
+    interruptRescue(state, cfg, 'recovery')
     endReserve(state, 'recovery')
     clearRefillEvidence(state)
     -- Recovery must suppress pending input even when a no-damage setting or
@@ -711,6 +892,7 @@ function M.update(game_side, state, cfg, obs)
   end
   state.paused = sensor.cutIn == true or sensor.timeScale == 0 or recovering
   if state.paused then
+    clearRescueEvidence(state)
     endReserve(state, 'paused')
     clearRefillEvidence(state)
     return result(state, {focus = state.focus == true, min_y = setting(cfg, 'min_y')},
@@ -722,6 +904,7 @@ function M.update(game_side, state, cfg, obs)
   updateRecovery(state, p, cfg)
   observeHeldRefill(state, p, obs, elapsed)
   updateC2Ready(state, p, sensor, elapsed)
+  local rescue_requested = updateRescue(state, p, sensor, cfg)
   state.bloom_mode = updateBloomMode(state, p, obs, cfg) and true or nil
   -- Cap pressure from the previous dodge call turns the next decision toward a
   -- charge attack instead of more movement (see dodge.choose move_cap_forced).
@@ -742,6 +925,8 @@ function M.update(game_side, state, cfg, obs)
           or (not obs.has_ignition and not intent.capture_potential)))) then
     c2Intent(intent, obs)
   end
+  local rescue = applyRescue(state, intent, p, sensor, cfg, rescue_requested)
+  if rescue then return rescue end
 
   if state.target_level then
     if state.c2_reserve_active and charged < 100 then

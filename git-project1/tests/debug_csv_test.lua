@@ -36,7 +36,7 @@ local function columns(line)
   return result
 end
 local header, first, second = columns(output[1]), columns(output[2]), columns(output[3])
-assert(#header == 34 and #first == 34 and #second == 34, 'CSV columns not aligned')
+assert(#header == 42 and #first == 42 and #second == 42, 'CSV columns not aligned')
 local map = {}; for index,name in ipairs(header) do map[name]=index end
 assert(tonumber(first[map.laser_count]) == 1, 'laser count missing from diagnostics')
 assert(tonumber(first[map.tracked_lasers]) == 0, 'first frame must not invent history')
@@ -46,6 +46,11 @@ assert(tonumber(first[map.laser_history_resets]) == 0, 'new laser is not an inva
 assert(tonumber(first[map.sensor_valid]) == 1, 'sensor validity missing')
 assert(math.abs(tonumber(first[map.move_scale_x]) - 0.4) < 1e-6, 'poison speed missing')
 assert(first[map.can_charge] == 'true', 'charge gate missing')
+assert(tonumber(first[map.poison_nav_active]) == 1, 'poison navigation missing')
+assert(tonumber(first[map.poison_level]) == 1, 'local poison overlap count missing')
+assert(tonumber(first[map.poison_probe_count]) > 0, 'escape probes missing')
+assert(tonumber(first[map.poison_nav_samples]) > 0, 'terrain sampling work missing')
+assert(tonumber(first[map.poison_cost]), 'chosen poison score missing')
 for _,mask in ipairs(sent) do assert(math.floor(mask/2)%2 == 0, 'X key emitted') end
 io.open, dofile = actual_open, actual_dofile
-print('PASS: in-memory main-loop CSV integration, 34 matching columns, laser/poison/state counters, no X')
+print('PASS: in-memory main-loop CSV integration, 42 matching columns, laser/poison/navigation/state counters, no X')

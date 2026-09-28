@@ -69,7 +69,9 @@ function Run-Prepare([string] $Label) {
 }
 foreach ($case in @(
     @{difficulty='custom'; move_change_budget=1; vision_radius=16; attention_capacity=1; attention_recovery_per_second=0.1},
-    @{difficulty='human300'; move_change_budget=10; vision_radius=640; attention_capacity=256; attention_recovery_per_second=256}
+    @{difficulty='human300'; move_change_budget=10; vision_radius=640; attention_capacity=256; attention_recovery_per_second=256},
+    @{difficulty='unlimited'}, @{difficulty='infinite'},
+    @{difficulty='unlimited'; plan_interval=6}, @{difficulty='human200'; plan_interval=1}
 )) {
     $candidate = ConvertFrom-Json $settingsJson
     foreach ($name in $case.Keys) { $candidate.ai | Add-Member -NotePropertyName $name -NotePropertyValue $case[$name] -Force }
@@ -81,6 +83,8 @@ foreach ($case in @(
         if ($generated -notmatch ([regex]::Escape($name) + '\s*=\s*' + [regex]::Escape($expected) + '\s*[,}]')) { throw "Launcher lost $name = $expected." }
         $checks++
     }
+    & python (Join-Path $project 'tests\runtime_settings_fixture_test.py') --fixture $fixture
+    if ($LASTEXITCODE -ne 0) { throw 'Lua did not honor prepared preset/override settings.' }
 }
 $invalid = @(
     @('move_change_budget',0), @('move_change_budget',11), @('move_change_budget',6.5), @('move_change_budget','6'),

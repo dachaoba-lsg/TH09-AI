@@ -20,7 +20,7 @@ $editorText = [IO.File]::ReadAllText($editor)
 $configText = [IO.File]::ReadAllText((Join-Path $project 'src\ai\config.lua'))
 foreach ($entry in [regex]::Matches($editorText, '(human\d+|unlimited)=@\((\d+),(\d+)\)')) {
     $tier=$entry.Groups[1].Value; $capacity=$entry.Groups[2].Value; $recovery=$entry.Groups[3].Value
-    Check ($configText -match ($tier+'\s*=\s*\{\s*tracked_threat\s*=\s*'+$capacity+',\s*threat_per_second\s*=\s*'+$recovery+'\s*\}')) ('Menu preset reference differs from config.lua: '+$tier)
+    Check ($configText -match ($tier+'\s*=\s*\{\s*tracked_threat\s*=\s*'+$capacity+',\s*threat_per_second\s*=\s*'+$recovery+'\s*(?:,\s*plan_interval\s*=\s*1\s*)?\}')) ('Menu preset reference differs from config.lua: '+$tier)
 }
 function Expect-Rejected([hashtable] $Options, [string] $Label) {
     $before = [Convert]::ToBase64String([IO.File]::ReadAllBytes($settingsPath))
@@ -125,5 +125,16 @@ foreach ($case in @(
     $global:TH09SettingsTestAnswers.Enqueue('q')
     $display = & $editor -PackageRoot $fixture 6>&1 | Out-String
     Check (($display -match '当前关闭了注意力限制') -eq $case.warning) ('Menu enabled status differs from runtime for ' + $case.tier + ' / ' + $case.enabled)
+}
+# A fresh 3.7 config leaves scan interval to the preset. Switching tiers must
+# not manufacture a sticky override; old explicit values are checked above.
+$fresh = ConvertFrom-Json ([IO.File]::ReadAllText((Join-Path $project 'dist\TH09-AI\launcher-settings.json')))
+Check ($null -eq $fresh.ai.PSObject.Properties['plan_interval']) 'Public JSON pins the scan interval.'
+[IO.File]::WriteAllText($settingsPath, ($fresh | ConvertTo-Json -Depth 100), (New-Object Text.UTF8Encoding($false)))
+foreach ($tier in @('unlimited','human200','unlimited')) {
+    Invoke-Edit @{ Difficulty=$tier }
+    $r = Read-Settings
+    Check ($r.ai.difficulty -eq $tier) 'Repeated preset selection failed.'
+    Check ($null -eq $r.ai.PSObject.Properties['plan_interval']) 'Preset wrote an unintended scan override.'
 }
 Write-Output ('PASS: ' + $checks + ' player-settings checks; PowerShell ' + $PSVersionTable.PSVersion + '; fixture ' + $fixture)

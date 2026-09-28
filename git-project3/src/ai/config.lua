@@ -28,7 +28,8 @@ return {
     release_settle_frames = 12, recharge_observe_frames = 150,
     -- Release goal: one C2 per 8 seconds of game time when chargeable/funded.
     -- C1 never resets this clock; below 200 energy C1 keeps the same cadence.
-    -- Deadline charges may proceed without an ideal chain. No danger trigger.
+    -- Deadline charges may proceed without an ideal chain. Defensive C2 has
+    -- its own limited-perception evidence and reuses the same charge flow.
     max_c_interval_frames = 480, cadence_margin_frames = 2,
     -- Keep a mature C1 briefly only when measured, ongoing stock gain can
     -- fund a wanted C2 soon. Static near-200 energy never proves a refill.
@@ -69,6 +70,11 @@ return {
     -- 3.1 attention-overload pressure (dodge.attention): how many consecutive
     -- overloaded callbacks precede the charge-attack answer.
     attention_escape_frames = 6, attention_pressure_max = 30, attention_pressure_decay = 1,
+    -- Defensive C2 uses coarse visible attention saturation or few safe
+    -- admitted routes. It never receives exact TTC for untracked objects.
+    rescue_pressure_frames = 3, rescue_credit_fraction = 0.2, rescue_safe_routes = 2,
+    rescue_prepare_margin_frames = 12, rescue_release_margin_frames = 2,
+    rescue_confirm_frames = 8, rescue_cooldown_frames = 90, rescue_charge_timeout_frames = 180,
     -- Fast travel precedes a brief capture; a blocked route cannot lock fire
     -- forever. A post-C2 request must acquire real native confirmation.
     capture_approach_frames = 60, followup_confirm_frames = 8,
@@ -117,12 +123,11 @@ return {
     attention = {
       enabled = true,
       difficulty = "human200",
-      -- plan_interval 1: look at the field every callback. The "a person re-reads
-      -- the screen a few times a second" effect comes from threat_per_second
-      -- (acquisition rate), which is host-independent. Larger intervals delay
-      -- selection of new targets; selected IDs still bind to fresh geometry
-      -- every callback, including hosts that reuse or rebuild object tables.
-      threat_per_second = 19.0, tracked_threat = 26.0, plan_interval = 1,
+      -- Keep the former public scan interval for human/custom defaults.
+      -- unlimited selects 1 below; an explicit runtime plan_interval wins.
+      -- Acquisition credit remains independently limited. Selected IDs bind
+      -- to fresh geometry every callback, regardless of this scan interval.
+      threat_per_second = 19.0, tracked_threat = 26.0, plan_interval = 6,
       reflex_radius = 10, urgent_frames = 24, blind_urgent_limit = 3,
       -- "In front of me": an object matters when it passes within this radius
       -- (game units) during the horizon, even if it would miss a standing player.
@@ -135,7 +140,7 @@ return {
       width_reference = 128, width_max = 2.5, min_cost = 0.5, max_cost = 6,
     },
     -- Survival-time tiers (Lunatic baseline). "unlimited" keeps the human shape
-    -- (sight radius, look interval) but not the budget; "mech" removes the limit
+    -- (sight radius, movement) with faster scans; "mech" removes the attention limit
     -- altogether and is the calibration reference.
     -- Anchored on the measured demand of a real 10-minute match (mech, 627 s):
     -- objects_relevant median 21 / p90 41 -> about 29 / 57 threat units, with
@@ -153,7 +158,7 @@ return {
       human240 = { tracked_threat = 32, threat_per_second = 24 },
       human300 = { tracked_threat = 40, threat_per_second = 30 },
       human480 = { tracked_threat = 55, threat_per_second = 40 },
-      unlimited = { tracked_threat = 120, threat_per_second = 90 },
+      unlimited = { tracked_threat = 120, threat_per_second = 90, plan_interval = 1 },
     },
     -- 3.1 names kept working for existing settings files.
     attention_aliases = {

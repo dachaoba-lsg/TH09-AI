@@ -39,6 +39,15 @@ return {
     preferred_x = 0,
     preferred_y = 320,
     position_cost = 0.00002,
+    -- Soft poison terrain guidance only; false restores the previous movement
+    -- policy while keeping poison-aware speed and hard bullet safety. Targets
+    -- are bounded terrain probes, not guaranteed safe long-range bullet paths.
+    poison_navigation = {
+      enabled = true,
+      risk_weight = 80,       -- clamped to 0..1000; overlapping dose is squared
+      progress_weight = 6,    -- clamped to 0..100; escape progress through flat dose
+      replan_frames = 12,     -- clamped to 1..60; retain similar target between plans
+    },
     -- Laser-only history estimates consecutive-frame geometry changes.
     -- Linear motion/growth is continuous; rotating beams use up to 12 swept
     -- intervals (plus at most two dimension-zero boundaries). Ordinary

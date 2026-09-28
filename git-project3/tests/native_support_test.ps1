@@ -1,8 +1,10 @@
 param(
     [Parameter(Mandatory=$true)][string] $GameExe,
-    [string] $RuntimePath
+    [string] $RuntimePath,
+    [string] $AuthorizedKey = $env:TH09_TEST_SIDE_KEY
 )
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrEmpty($AuthorizedKey)) { throw 'Both-side native verification requires TH09_TEST_SIDE_KEY in the caller environment.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if (-not $RuntimePath) { $RuntimePath = Join-Path $projectRoot 'dist\TH09-AI\runtime' }
 $fixture = Join-Path $projectRoot ('work\support-test-' + [Guid]::NewGuid().ToString('N'))
@@ -23,10 +25,14 @@ $scriptPath = Join-Path $fixture 'dummy.lua'
 [IO.File]::WriteAllText($scriptPath, '-- Suspended-only fixture. Main thread never executes.', [Text.Encoding]::ASCII)
 $iniPath = Join-Path $fixture 'ka_ai_duka.ini'
 $checks = 0
-function Invoke-Suspended([string]$Name, [int]$ExpectedExit) {
+function Invoke-Suspended([string]$Name, [int]$ExpectedExit, [string]$NativeKey = '') {
     $stdout = Join-Path $fixture ($Name + '-stdout.log')
     $stderr = Join-Path $fixture ($Name + '-stderr.log')
-    $process = Start-Process -FilePath (Join-Path $fixture 'th09ai-launcher.exe') -ArgumentList @(('"{0}"' -f $testGame), '--verify-suspended') -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $previous = [Environment]::GetEnvironmentVariable('TH09_AI_SIDE_KEY', 'Process')
+    try {
+        [Environment]::SetEnvironmentVariable('TH09_AI_SIDE_KEY', $NativeKey, 'Process')
+        $process = Start-Process -FilePath (Join-Path $fixture 'th09ai-launcher.exe') -ArgumentList @(('"{0}"' -f $testGame), '--verify-suspended') -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    } finally { [Environment]::SetEnvironmentVariable('TH09_AI_SIDE_KEY', $previous, 'Process') }
     $null = $process.Handle # Keep the handle for ExitCode in Windows PowerShell 5.1.
     if (-not $process.WaitForExit(45000)) {
         Stop-Process -Id $process.Id -ErrorAction SilentlyContinue
@@ -47,7 +53,8 @@ foreach ($side in @(1,2)) {
             $script2 = if ($side -eq 2) { $scriptPath } else { '' }
             $ini = "[common]`r`nexe_path=$testGame`r`nsnapshot=false`r`n[1P]`r`nenabled=$enabled1`r`nscript_path=$script1`r`n[2P]`r`nenabled=$enabled2`r`nscript_path=$script2`r`n[practice]`r`nplayer1_no_damage=$noDamage`r`nplayer1_invincible=$invincible`r`n[window]`r`nenabled=0`r`n"
             [IO.File]::WriteAllText($iniPath, $ini, [Text.Encoding]::Default)
-            Invoke-Suspended "side-$side-practice-$noDamage-$invincible" 0
+            $nativeKey = if ($side -eq 1) { $AuthorizedKey } else { '' }
+            Invoke-Suspended "side-$side-practice-$noDamage-$invincible" 0 $nativeKey
         }
     }
 }

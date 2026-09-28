@@ -10,6 +10,7 @@
 #include "input_patches.h"
 #include "ai_side_config.h"
 #include "ai_input_patches.h"
+#include "side_key_auth.h"
 __declspec(dllimport) wchar_t ** WINAPI CommandLineToArgvW(const wchar_t *, int *);
 
 static int read_equal(HANDLE process, DWORD address, const unsigned char *expected, SIZE_T length) {
@@ -82,6 +83,15 @@ int main(void) {
         LocalFree(argv);
         return 3;
     }
+    /* The script is not an authorization boundary. Independently verify the
+       key before creating a game process, even for direct/INI-only launches. */
+    if (!Th09AuthorizeSideFromEnvironment(ai_side, FALSE)) {
+        SetEnvironmentVariableW(L"TH09_AI_SIDE_KEY", NULL);
+        fprintf(stderr, "1P native authorization failed; launch refused. Use the package startup and a valid key.\n");
+        LocalFree(argv);
+        return 15;
+    }
+    if (ai_side == 2) SetEnvironmentVariableW(L"TH09_AI_SIDE_KEY", NULL);
     ai_patch = &th09_ai_input_patches[ai_side - 1];
     wcscpy(game_dir, argv[1]); slash = wcsrchr(game_dir, L'\\');
     if (!slash || _wcsicmp(slash + 1, L"th09.exe") != 0) return 3;
@@ -91,9 +101,13 @@ int main(void) {
     memset(&process, 0, sizeof(process));
     if (!CreateProcessW(argv[1], command, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL,
         game_dir, &startup, &process)) {
+        SetEnvironmentVariableW(L"TH09_AI_SIDE_KEY", NULL);
         fprintf(stderr, "CreateProcess failed: %lu\n", GetLastError());
         return 4;
     }
+    /* Only the newly created child needs the input for its independent check.
+       The support worker consumes and clears its inherited copy. */
+    SetEnvironmentVariableW(L"TH09_AI_SIDE_KEY", NULL);
     /* Practice gates must be fully installed before the game executes any
        main-thread code. A worker created by DllMain runs after loader unlock. */
     for (i = 0; i < 2; ++i) {

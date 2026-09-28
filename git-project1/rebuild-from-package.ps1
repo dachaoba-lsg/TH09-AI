@@ -1,10 +1,10 @@
-﻿param(
+param(
     [Parameter(Mandatory = $true)] [string] $CompilerPath,
-    [string] $Version = '0.1.9',
+    [string] $Version = '0.1.9.2',
     [switch] $Overwrite
 )
 $ErrorActionPreference = 'Stop'
-if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid package version.' }
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-z0-9]+)?\z') { throw 'Invalid package version.' }
 if (-not [IO.Path]::IsPathRooted($CompilerPath) -or -not [IO.File]::Exists($CompilerPath)) {
     throw 'CompilerPath must be the full path to a complete TinyCC 0.9.27 win32 installation/tcc.exe.'
 }

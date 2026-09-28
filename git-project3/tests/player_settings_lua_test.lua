@@ -92,6 +92,7 @@ local function settings(ai,expected)
     if key=='capacity' then actual=f.effective.attention.tracked_threat
     elseif key=='recovery' then actual=f.effective.attention.threat_per_second
     elseif key=='enabled' then actual=f.effective.attention.enabled
+    elseif key=='plan_interval' then actual=f.effective.attention.plan_interval
     else actual=f.effective[key] end
     eq(actual,value,'effective '..key)
   end
@@ -163,9 +164,20 @@ scenario('missing and malformed ai blocks keep defaults',function()
   settings('human300',{capacity=26,recovery=19})
   settings({difficulty='not-a-preset'},{capacity=26,recovery=19})
 end)
+scenario('scan presets and explicit compatibility',function()
+  for _,tier in ipairs({'human45','human90','human120','human150','human180',
+      'human200','human240','human300','human480','mech','custom','not-a-preset'}) do
+    settings({difficulty=tier},{plan_interval=6})
+  end
+  for _,tier in ipairs({'unlimited','infinite'}) do
+    settings({difficulty=tier},{plan_interval=1,capacity=120,recovery=90})
+    settings({difficulty=tier,plan_interval=6},{plan_interval=6,capacity=120,recovery=90})
+  end
+  settings({difficulty='human200',plan_interval=1},{plan_interval=1,capacity=26,recovery=19})
+end)
 scenario('CSV appends thirteen fields after the existing 149 columns',function()
   local f=settings({});local header=split(f.output[1])
-  eq(#header,169,'3.5.0 CSV width');eq(header[1],'frame','first original column')
+  eq(#header,197,'3.6.0 CSV width');eq(header[1],'frame','first original column')
   eq(header[134],'hits_total','pre-3.2.5 prefix boundary');eq(header[135],'round_id','round diagnostics position')
   eq(header[149],'c2_ready_updates','existing 149-column suffix')
   local suffix={'vision_radius','vision_visible_bullets','vision_hidden_bullets','vision_visible_enemies',
@@ -184,13 +196,19 @@ if RUNTIME_SETTINGS_FIXTURE then
     f.step()
     eq(f.loader_calls,1,'main parsed the actual generated file')
     local mapping={move_change_budget='move_change_budget',vision_radius='vision_radius',
-      attention_capacity='tracked_threat',attention_recovery_per_second='threat_per_second'}
+      attention_capacity='tracked_threat',attention_recovery_per_second='threat_per_second',
+      plan_interval='plan_interval'}
     for field,destination in pairs(mapping) do
       if expected.ai and expected.ai[field]~=nil then
         local target=(field=='move_change_budget' or field=='vision_radius') and f.effective or f.effective.attention
         eq(target[destination],expected.ai[field],'JSON-generated '..field..' reaches choose')
       end
     end
+    local runtime_ai=expected.ai or {}
+    local tier=runtime_ai.difficulty
+    local default_interval=(tier=='unlimited' or tier=='infinite') and 1 or 6
+    eq(f.effective.attention.plan_interval,runtime_ai.plan_interval or default_interval,
+      'actual JSON-to-runtime scan preset or override')
     for _=2,60 do f.step() end
     eq(f.calls,60,'real planners remain live for all sixty allowed callbacks')
     check(f.sent[1]~=0,'fixture must issue real avoidance input before expiry')

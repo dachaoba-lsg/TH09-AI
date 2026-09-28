@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string] $ZipPath, [string] $Version = '0.1.9')
+﻿param([Parameter(Mandatory=$true)][string] $ZipPath, [string] $Version = '0.1.9.2')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead($ZipPath)
@@ -33,7 +33,7 @@ try {
         'source/src/native/window_support.c','source/src/native/practice_patches.c',
         'source/src/native/laser_sensor.c','source/src/native/laser_sensor.h',
         'source/src/native/player_sensor.c','source/src/native/player_sensor.h',
-        'source/src/native/player_sensor_selftest.c')
+        'source/src/native/player_sensor_selftest.c', 'ai/poison_navigation.lua','source/src/ai/poison_navigation.lua')
     foreach ($path in $required) {
         Check ($null -ne $zip.GetEntry('TH09-AI/' + $path)) "Missing required release material: $path"
     }
@@ -61,7 +61,7 @@ try {
     $author = -join ([char[]](0x5723,0x8bde,0x8001,0x4eba,0x7684,0x9a6f,0x9e7f))
     Check ((Read-Entry 'LICENSE.txt').Contains('Copyright (c) 2026 ' + $author + '-xunlu')) 'Author mismatch.'
     Check ((Read-Entry 'VERSION.txt').StartsWith('TH09-AI ' + $Version)) 'Version mismatch.'
-    foreach ($file in @('main.lua','config.lua','dodge.lua','keyutils.lua')) {
+    foreach ($file in @('main.lua','config.lua','dodge.lua','keyutils.lua','poison_navigation.lua')) {
         Check ((Entry-Hash ('ai/' + $file)) -eq (Entry-Hash ('source/src/ai/' + $file))) "AI source/runtime mismatch: $file"
     }
     $expectedHashes = @{

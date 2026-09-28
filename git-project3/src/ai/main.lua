@@ -3,6 +3,7 @@ local keys = dofile("keyutils.lua")
 local dodge = dofile("dodge.lua")
 local observer = dofile("bloom_observer.lua")
 local bloom = dofile("bloom.lua")
+local AI_VERSION = "3.7.0-test"
 
 local function loadRuntimeSettings()
   -- The launcher owns the user-facing settings in launcher-settings.json and
@@ -133,6 +134,12 @@ local columns = {
   "attention_capacity_config", "attention_recovery_config", "attention_enabled",
   "c1_release_delay_updates", "c1_kill_model", "c1_combat_valid", "c1_hp_rejected",
   "c1_blocked_shots", "c1_locked_seed_count", "c1_seed_wait_age",
+  "ai_version", "ai_side", "ai_character", "opponent_character", "attention_plan_interval",
+  "attention_scanned", "attention_waiting_scan_count", "attention_credit_blocked_count",
+  "attention_capacity_blocked_count", "attention_panic", "charge_speed", "charge_warmup_frames", "time_scale",
+  "rescue_state", "rescue_reason", "rescue_pressure", "rescue_age", "rescue_ready_updates",
+  "rescue_known_ttc", "rescue_late", "rescue_cooldown", "rescue_confirmed", "rescue_attempts", "rescue_releases",
+  "rescue_observed", "rescue_routes_total", "rescue_routes_safe", "rescue_route_ttc",
 }
 -- The game host runs Lua with a stripped standard environment (print is nil in
 -- ka_ai_duka), so every optional global is probed before use: an unavailable
@@ -175,17 +182,44 @@ if config.debug_log then
   end
 end
 
+local function debugCharacter(player)
+  local value = type(player) == 'table' and player.character
+  return type(value) == 'number' and value == value and value >= 0 and value <= 15
+    and value == math.floor(value) and value or -1
+end
+
 local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_ms)
   if not debug_file then return end
+  -- Log alert edges without turning every six-update scan into a disk write.
+  -- These snapshots are diagnostics, not a full projectile replay or proof of
+  -- which object caused a hit. Sampling never feeds back into either policy.
+  local blind_alert = (movement.attention_blind_urgent or 0) > 0
+  local overload_alert = movement.attention_overloaded == true
+  local cap_alert = movement.move_cap_risk == true
+  local rescue_state, rescue_reason = state.bloom.rescue_state or 'idle', state.bloom.rescue_reason or ''
+  local rescue_late, rescue_confirmed = state.bloom.rescue_late == true, state.bloom.rescue_confirmed == true
   local event = plan.phase == 'release' or plan.reason == 'chain_lost_cancel'
     or plan.phase ~= state.last_debug_phase or state.hit == true or state.round_start == true
     or state.bloom.c2_reserve_active ~= state.last_debug_reserve
     or state.bloom.c2_reserve_reason ~= state.last_debug_reserve_reason
     or state.bloom.c1_lost_age ~= state.last_debug_c1_lost_age
+    or blind_alert ~= state.last_debug_blind_alert
+    or overload_alert ~= state.last_debug_overload_alert
+    or cap_alert ~= state.last_debug_cap_alert
+    or rescue_state ~= state.last_debug_rescue_state
+    or rescue_reason ~= state.last_debug_rescue_reason
+    or rescue_late ~= state.last_debug_rescue_late
+    or rescue_confirmed ~= state.last_debug_rescue_confirmed
+  state.last_debug_blind_alert, state.last_debug_overload_alert, state.last_debug_cap_alert =
+    blind_alert, overload_alert, cap_alert
   state.last_debug_phase = plan.phase
   state.last_debug_reserve, state.last_debug_reserve_reason = state.bloom.c2_reserve_active,
     state.bloom.c2_reserve_reason
   state.last_debug_c1_lost_age = state.bloom.c1_lost_age
+  state.last_debug_rescue_state, state.last_debug_rescue_reason =
+    rescue_state, rescue_reason
+  state.last_debug_rescue_late, state.last_debug_rescue_confirmed =
+    rescue_late, rescue_confirmed
   if state.frame % config.debug_log_interval_frames ~= 0 and not event then return end
   local sensor, counts = player.sensor, obs.counts or {}
   local vision = state.vision or {}
@@ -196,6 +230,7 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
   local c1_locked = 0
   for _ in pairs(state.bloom.c1_seed_ids or {}) do c1_locked = c1_locked + 1 end
   local total = (c2.chain_bullets or 0) + (c2.direct_bullets or 0) + (c2.contested_bullets or 0)
+  local opponent_side = (player_side == 1 or player_side == 2) and game_sides[3-player_side] or nil
   local values = {
     state.frame, player.x, player.y, player.life, player.spellPoint, player.combo,
     player.currentCharge, player.currentChargeMax, plan.target_level, plan.phase, state.timed_out,
@@ -258,6 +293,22 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
     config.dodge.attention.threat_per_second, config.dodge.attention.enabled ~= false,
     c1.release_delay_updates or 0, c1.kill_model == true, c1.combat_valid == true,
     c1.hp_rejected or 0, c1.blocked_shots or 0, c1_locked, state.bloom.c1_lost_age or 0,
+    AI_VERSION, player_side, debugCharacter(player),
+    debugCharacter(type(opponent_side) == 'table' and opponent_side.player),
+    config.dodge.attention.plan_interval, movement.attention_scanned == true,
+    movement.attention_waiting_scan_count or 0, movement.attention_credit_blocked_count or 0,
+    movement.attention_capacity_blocked_count or 0, movement.attention_panic == true,
+    player.chargeSpeed, sensor.chargeWarmupFrames, sensor.timeScale,
+    state.bloom.rescue_state or 'idle', state.bloom.rescue_reason or '',
+    state.bloom.rescue_pressure or 0, state.bloom.rescue_age or 0,
+    state.bloom.rescue_ready_updates or -1, state.bloom.rescue_known_ttc or -1,
+    state.bloom.rescue_late == true, state.bloom.rescue_cooldown or 0,
+    state.bloom.rescue_confirmed == true, state.bloom.rescue_attempts or 0,
+    state.bloom.rescue_releases or 0,
+    -- Route evidence is from this callback; policy TTC above is the previous
+    -- callback's evidence advanced conservatively by the policy.
+    movement.rescue_observed == true, movement.rescue_routes_total or 0,
+    movement.rescue_routes_safe or 0, movement.rescue_known_ttc or -1,
   }
   for index = 1, #columns do values[index] = tostring(values[index] == nil and "" or values[index]) end
   debug_file:write(table.concat(values, ",") .. "\n")

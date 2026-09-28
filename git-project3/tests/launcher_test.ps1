@@ -143,7 +143,7 @@ try {
     foreach ($name in @('th09ai-launcher.exe', 'window_support.dll')) {
         [IO.File]::Copy((Join-Path $runtimeSource $name), (Join-Path $practiceRuntime $name))
     }
-    [IO.File]::Copy((Join-Path $project 'vendor\release\ka_ai_duka\inject.dll'), (Join-Path $practiceRuntime 'inject.dll'))
+    [IO.File]::Copy((Join-Path $runtimeSource 'inject.dll'), (Join-Path $practiceRuntime 'inject.dll'))
     [IO.File]::Copy((Join-Path $project 'src\ai\main.lua'), (Join-Path $practicePackage 'ai\main.lua'))
     $utf8Bom = New-Object Text.UTF8Encoding($true)
     foreach ($name in @('prepare-and-start.ps1', 'prepare-input.ps1')) {

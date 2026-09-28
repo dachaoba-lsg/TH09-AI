@@ -34,6 +34,8 @@ try {
         'source/build-public-package.ps1','source/rebuild-from-package.ps1',
         'source/LICENSE.txt','source/src/native/launcher.c',
         'source/src/native/ai_side_config.h','source/src/native/ai_input_patches.h',
+        'source/src/native/side_key_auth.c','source/src/native/side_key_auth.h',
+        'source/src/native/side_key_auth_selftest.c','source/src/native/inject_guard_builder.c',
         'source/src/native/enemy_sensor.c','source/src/native/enemy_sensor.h','source/src/native/enemy_sensor_selftest.c',
         'source/src/native/window_support.c','source/src/native/practice_patches.c',
         'source/src/native/laser_sensor.c','source/src/native/laser_sensor.h',
@@ -71,6 +73,7 @@ try {
     Check ($null -eq $settings.ai.PSObject.Properties['attention_recovery_per_second']) 'The public default must not override preset attention recovery.'
     Check ($null -eq $settings.ai.PSObject.Properties['threat_per_second']) 'The public default must not pin the tier budget.'
     Check ($null -eq $settings.ai.PSObject.Properties['tracked_threat']) 'The public default must not pin the tier budget.'
+    Check ($null -eq $settings.ai.PSObject.Properties['plan_interval']) 'The public default must leave scan interval to the selected preset.'
     Check ($settings.ai.overload_action -eq 'c_then_panic') 'Public overload action default changed.'
     Check ((Read-Entry 'LICENSE.txt') -eq (Read-Entry 'source/LICENSE.txt')) 'Root/source MIT licenses differ.'
     $author = -join ([char[]](0x5723,0x8bde,0x8001,0x4eba,0x7684,0x9a6f,0x9e7f))
@@ -90,7 +93,7 @@ try {
         Check ((Entry-Hash ('ai/' + $file)) -eq (Entry-Hash ('source/src/ai/' + $file))) "AI source/runtime mismatch: $file"
     }
     $expectedHashes = @{
-        'runtime/inject.dll' = '2BA67F1F80EBE53F978DC6843777764B5EAD911A688C89C9CD68CC8C2D9CAE00'
+        'runtime/inject.dll' = '3F7499B450787EBD603FBA73F31528CB852D16CD430A6395F5C38759CEDEF376'
         'runtime/ka_ai_duka.exe' = '625AFFD9F34E7580B4DDC9062F4C9A0AEB8829C46EB1F5D01928C1BC09B2F625'
         'licenses/tinycc/tcc-0.9.27.tar.bz2' = 'DE23AF78FCA90CE32DFF2DD45B3432B2334740BB9BB7B05BF60FDBFC396CEB9C'
     }

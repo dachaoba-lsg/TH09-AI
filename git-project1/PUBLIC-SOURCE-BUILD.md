@@ -1,12 +1,18 @@
-# TH09-AI 0.1.9 随包源码与重建
+# TH09-AI 0.1.9.2 随包源码与重建
 
 本文件在玩家压缩包中位于 `TH09-AI/source/BUILD.md`。同目录的 `README.md` 是开发说明；玩家使用方法在上一级 `README.md` 和 `使用说明.txt`。
 
 随包源码包含我们编写的 Lua AI、启动脚本、原生启动器、窗口支持、练习模式和激光感知修正代码，以及构建脚本和项目许可。0.1.8 的 `source/src/native/laser_sensor.c/.h` 与动态激光 Lua 预测需要配套使用；只复制新 `dodge.lua` 不会带上原生几何修复。`source/src/native/window_resize_selftest.c` 是构建时运行的原生窗口测试。原工程里的 Python/Lua 完整回归套件未随包提供，也不是重新编译所必需的文件。这里不包含游戏、开发机路径、vendor/work/tests 目录或运行日志。
 
-0.1.9 是首轮毒雾测试包，新增 `player_sensor.c/.h`，只读感知中毒移动倍率、临时保护及回充相关状态，配合 Lua 的非致死减速地形和保护结束后风险预测。移动倍率依据当前毒云与位置重算，不是上一更新的实测位移。感知不修改游戏状态或2P生命，也不加入自适应主动C攻击；请使用整套原生与Lua源码构建，不把新版脚本单独混入旧运行包。实战效果仍待玩家使用梅蒂欣测试，不能把编译成功视为实战验收。
+0.1.9.2只新增移动侧的软毒风险和有界逃毒目标，使AI倾向于离开高浓度毒区；近距碰撞安全仍优先，不强制一直移动。本版沿用0.1.9的`player_sensor.c/.h`及接口版本1，不新增原生感知字段。移动倍率依据当前毒云与位置重算，不是上一更新的实测位移；感知不修改游戏状态或2P生命。随机C、50万停Z和从不按X不变，不加入主动C联动、训练或高层能量规划。
 
-原生模块导出 `player.sensor` 接口版本1；Lua遇到缺失、无效或不匹配的快照会释放全部AI输入并在控制台报错，不回退到忽略毒雾的旧策略。原生安装失败则阻止本次游戏继续启动。详细字段和成功／失败日志见 `source/src/native/README.md`，玩家CSV列说明见上一级 `README.md`。本版不增加用户配置项。
+新移动模块是`source/src/ai/poison_navigation.lua`，由避弹层调用；默认`dodge.poison_navigation`的四项为`enabled=true`、`risk_weight=80`、`progress_weight=6`、`replan_frames=12`。关闭它只关闭新导航，不关闭毒速预测。新增8个Lua诊断列使CSV达到42列；具体含义、范围和调参方法见玩家README。
+
+已收到的两段0.1.9毒雾录像反馈有反复停下、清弹后未迁移的现象；它们不是0.1.9.2验收。请使用完整新包，保留旧0.1.9及更早ZIP；本次打包不自动覆盖安装中的游戏。0.1.9.2实战效果仍待玩家使用梅蒂欣测试，不能把编译成功视为实战验收。
+
+本轮已通过原生／ABI／输入／启动计时回归、导航与普通弹／激光／毒速测试、42列CSV及1440状态随机C一致性检查。公开包检查与从随包源码重建的最终结果见本次交付测试说明；下面提供的是重建步骤，不用历史编译结果代替对当前生成包的检查。合成性能测试可能超过16.67毫秒，不能视为实机帧率保证。
+
+原生模块导出 `player.sensor` 接口版本1；Lua遇到缺失、无效或不匹配的快照会释放全部AI输入并在控制台报错，不回退到忽略毒雾的旧策略。原生安装失败则阻止本次游戏继续启动。详细字段和成功／失败日志见 `source/src/native/README.md`，Lua移动参数及玩家CSV列说明见上一级 `README.md`；JSON与原生感知接口不变。
 
 重建后测试仍要求游戏Option中2P的`Charge Type = Slow`（长按Z蓄力，Shift低速）。相反的Charge模式不支持，检测到时AI停键并提示切回Slow；不自动更改1P设置，也不是新增JSON参数。
 
@@ -38,15 +44,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\rebuild-from-package.p
 
 ```text
 source/dist/TH09-AI/                    重建的可运行包
-source/dist/TH09-AI-v0.1.9.zip           含源码的新压缩包
+source/dist/TH09-AI-v0.1.9.2.zip         含源码的新压缩包
 source/work/native-tests/              本机构建测试文件
 ```
 
-默认版本是 `0.1.9`。已有同名 ZIP 时默认拒绝覆盖；可用 `-Version 0.1.9-local` 指定另一个名字，或明确添加 `-Overwrite`。自定义版本仅标识本地构建，不表示原发行者审核了修改。再次生成源码快照时，旧的生成目录会移到 `source/work/public-source-backups`，不会悄悄删除。旧 `0.1.8` ZIP 请保留为独立回退副本。
+默认版本是 `0.1.9.2`。已有同名 ZIP 时默认拒绝覆盖；可用 `-Version 0.1.9.2-local` 指定另一个名字，或明确添加 `-Overwrite`。自定义版本仅标识本地构建，不表示原发行者审核了修改。再次生成源码快照时，旧的生成目录会移到 `source/work/public-source-backups`，不会悄悄删除。旧 `0.1.9` 及更早ZIP请保留为独立回退副本。
 
 改动 `source/src` 后重新运行上面的命令即可重新编译和链接；源文件可审阅、修改、供个人使用。重建不需要游戏本体，也不会修改上一级原发行目录或任何游戏配置。若要试玩，请把**新生成的** `source/dist/TH09-AI` 另行放到你的 TH09 游戏附近；重建脚本本身不启动游戏。
 
-维护者在完整工程中使用 `build-native.ps1 -CompilerPath ...` 编译，然后用 `build-public-package.ps1 -Version 0.1.9` 生成带源码的发行包。后者严格选择所需源文件，不复制项目根目录中的其他资料。缺少许可、源码或上级发行必需文件时，脚本会明确失败；不要用空文件绕过检查。
+维护者在完整工程中使用 `build-native.ps1 -CompilerPath ...` 编译，然后用 `build-public-package.ps1 -Version 0.1.9.2` 生成带源码的发行包。后者严格选择所需源文件，不复制项目根目录中的其他资料。缺少许可、源码或上级发行必需文件时，脚本会明确失败；不要用空文件绕过检查。
 
 ## 修改 TinyCC 启动库并重新链接
 
@@ -79,7 +85,7 @@ cmd.exe /d /c build-tcc.bat -c C:\tools\tcc\tcc.exe -t 32 -i C:\tools\tcc-modifi
 该上游批处理会清理其源码 `win32` 目录内已有的编译输出，所以应在上面单独解压的开发副本中运行，并把现成编译器放在不同目录。构建成功后检查新目录中的 `tcc.exe`、`lib/libtcc1-32.a` 和 `include` 均已生成。然后回到本包 `TH09-AI/source`，用新的完整编译器目录重建：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\rebuild-from-package.ps1 -CompilerPath 'C:\tools\tcc-modified\tcc.exe' -Version 0.1.9-modified
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\rebuild-from-package.ps1 -CompilerPath 'C:\tools\tcc-modified\tcc.exe' -Version 0.1.9.2-modified
 ```
 
 编译器会从自身目录查找刚修改并重建的启动库，两个原生模块会重新链接该库。请保留你的库源码修改和相应许可，在分发修改版本时一并处理适用许可要求。上述操作不需要安装系统级编译环境，也无需提供或打包 TH09 游戏文件。

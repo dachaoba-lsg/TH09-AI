@@ -1,6 +1,6 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)] [string] $CompilerPath,
-    [string] $Version = '3.5.0-test',
+    [string] $Version = '3.7.0-test',
     [switch] $Overwrite
 )
 $ErrorActionPreference = 'Stop'
@@ -56,9 +56,9 @@ function Get-BuildHash([string] $Path) {
     try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '') }
     finally { $stream.Dispose(); $sha.Dispose() }
 }
-if ((Get-BuildHash (Join-Path $outerPackage 'runtime\inject.dll')) -ne '2BA67F1F80EBE53F978DC6843777764B5EAD911A688C89C9CD68CC8C2D9CAE00' -or
+if ((Get-BuildHash (Join-Path $outerPackage 'runtime\inject.dll')) -ne '3F7499B450787EBD603FBA73F31528CB852D16CD430A6395F5C38759CEDEF376' -or
     (Get-BuildHash (Join-Path $outerPackage 'runtime\ka_ai_duka.exe')) -ne '625AFFD9F34E7580B4DDC9062F4C9A0AEB8829C46EB1F5D01928C1BC09B2F625') {
-    throw 'The parent package does not contain the supported unmodified upstream ka_ai_duka v1.7 runtime.'
+    throw 'The parent package does not contain the supported guarded ka_ai_duka v1.7 runtime for this release.'
 }
 # Only this source/ workspace receives build outputs. Do not copy the outer
 # source/ folder, any game files, generated logs, or existing generated INI.

@@ -3,7 +3,8 @@
     [string] $ProjectRoot = '',
     [string] $PackageRoot = '',
     [switch] $VerifySuspended,
-    [string] $AuthorizedKey = $env:TH09_TEST_SIDE_KEY
+    [string] $AuthorizedKey = $env:TH09_TEST_SIDE_KEY,
+    [string] $RetiredKey = $env:TH09_TEST_RETIRED_SIDE_KEY
 )
 # Exercise real Windows PowerShell JSON -> startup INI generation in an owned
 # game/package copy. -PrepareOnly never starts a game or injects a DLL.
@@ -45,6 +46,7 @@ $checks = 0
 $runs = 0
 $verifiedSides = @{}
 $hasAuthorizedKey = -not [string]::IsNullOrEmpty($AuthorizedKey)
+$hasRetiredKey = -not [string]::IsNullOrEmpty($RetiredKey)
 function Check([bool] $Condition, [string] $Message) {
     if (-not $Condition) { throw $Message }
     $script:checks++
@@ -57,6 +59,7 @@ function Run-Prepare($Settings) {
     $script:runs++
     $log = Join-Path $fixture ('prepare-' + $script:runs + '.log')
     $old = $ErrorActionPreference
+    $privateValues = @($AuthorizedKey, $RetiredKey, $Settings.ai.side_key) | Where-Object { $_ -is [string] -and $_.Length -ge 4 -and -not [string]::IsNullOrWhiteSpace($_) }
     try {
         [IO.File]::WriteAllText($settingsPath, ($Settings | ConvertTo-Json -Depth 50), (New-Object Text.UTF8Encoding($true)))
         $before = Bytes $settingsPath
@@ -70,9 +73,11 @@ function Run-Prepare($Settings) {
         foreach ($outputPath in @($log, $iniPath, $luaPath)) {
             if (-not [IO.File]::Exists($outputPath)) { continue }
             $content = [IO.File]::ReadAllText($outputPath)
-            if ($hasAuthorizedKey -and $content.Contains($AuthorizedKey)) {
-                [IO.File]::WriteAllText($outputPath, $content.Replace($AuthorizedKey, '[REDACTED]'), (New-Object Text.UTF8Encoding($false)))
-                throw 'Authorized key appeared in generated output; output was redacted.'
+            foreach ($privateValue in $privateValues) {
+                if ($content.Contains($privateValue)) {
+                    [IO.File]::WriteAllText($outputPath, $content.Replace($privateValue, '[REDACTED]'), (New-Object Text.UTF8Encoding($false)))
+                    throw 'A key candidate appeared in generated output; output was redacted.'
+                }
             }
             Check ($content -notmatch 'side_key') 'Side key field leaked into generated output.'
         }
@@ -97,8 +102,12 @@ function Run-Prepare($Settings) {
             try {
                 if (-not [IO.File]::Exists($outputPath)) { continue }
                 $content = [IO.File]::ReadAllText($outputPath)
-                if ($hasAuthorizedKey -and $content.Contains($AuthorizedKey)) {
-                    [IO.File]::WriteAllText($outputPath, $content.Replace($AuthorizedKey, '[REDACTED]'), (New-Object Text.UTF8Encoding($false)))
+                $originalContent = $content
+                foreach ($privateValue in $privateValues) {
+                    $content = $content.Replace($privateValue, '[REDACTED]')
+                }
+                if ($content -cne $originalContent) {
+                    [IO.File]::WriteAllText($outputPath, $content, (New-Object Text.UTF8Encoding($false)))
                 }
             } catch { $cleanupFailed = $true }
         }
@@ -139,7 +148,7 @@ Expect-Side 2 0 0
 
 # Missing/wrong/type-invalid keys fall back before practice and INI derivation.
 # These values are public test sentinels, never the actual authorized value.
-foreach ($candidate in @('', 'incorrect-test-key', '  ', 1, $true, $false, $null, @(1,2), @{ value='test' })) {
+foreach ($candidate in @('', 'incorrect-test-key', '  ', ('a' * 257), 1, $true, $false, $null, @(1,2), @{ value='test' })) {
     foreach ($side in @(1,2)) {
         $settings = New-Settings
         $settings.ai | Add-Member -NotePropertyName side -NotePropertyValue $side -Force
@@ -158,6 +167,20 @@ $settings.practice.player1_no_damage = $true
 Check ((Run-Prepare $settings) -eq 0) 'Missing side key should use 2P.'
 Expect-Side 2 1 0
 Check ($lastPrepareLog -match '1P接管key未通过') 'Missing side key did not explain fallback.'
+
+# A retired secret is supplied only by the caller, never kept in this source.
+# Rotation must reject it in a real JSON -> INI run, not just a unit verifier.
+if ($hasRetiredKey) {
+    Check (-not $hasAuthorizedKey -or $RetiredKey -cne $AuthorizedKey) 'Retired and authorized test keys must differ.'
+    $settings = New-Settings
+    $settings.ai.side = 1
+    $settings.ai | Add-Member -NotePropertyName side_key -NotePropertyValue $RetiredKey -Force
+    $settings.practice.player1_no_damage = $true
+    $settings.practice.player1_invincible = $true
+    Check ((Run-Prepare $settings) -eq 0) 'Retired key must fall back without blocking 2P startup.'
+    Expect-Side 2 1 1
+    Check ($lastPrepareLog -match '1P接管key未通过') 'Retired key unexpectedly retained 1P authorization.'
+}
 
 # Round-trip switches prove there is no stale binding left in the previous side.
 # Without private test authorization these requests must consistently use 2P.
@@ -182,8 +205,18 @@ foreach ($side in @(1,2,1,2)) {
         if ($VerifySuspended -and -not $verifiedSides.ContainsKey($effectiveSide) -and $practice[0] -and $practice[1]) {
             # Connect the real JSON-generated INI to the real compiled native
             # launcher. It must never resume this owned game copy's main thread.
-            $output = & (Join-Path $runtime 'th09ai-launcher.exe') (Join-Path $game 'th09.exe') --verify-suspended
-            Check ($LASTEXITCODE -eq 0) 'Native launcher rejected generated side configuration.'
+            $savedNativeKey = [Environment]::GetEnvironmentVariable('TH09_AI_SIDE_KEY', 'Process')
+            try {
+                $nativeKey = if ($effectiveSide -eq 1) { $AuthorizedKey } else { $null }
+                [Environment]::SetEnvironmentVariable('TH09_AI_SIDE_KEY', $nativeKey, 'Process')
+                $output = & (Join-Path $runtime 'th09ai-launcher.exe') (Join-Path $game 'th09.exe') --verify-suspended
+                $nativeExit = $LASTEXITCODE
+            } finally {
+                [Environment]::SetEnvironmentVariable('TH09_AI_SIDE_KEY', $savedNativeKey, 'Process')
+                $nativeKey = $null
+                $savedNativeKey = $null
+            }
+            Check ($nativeExit -eq 0) 'Native launcher rejected generated side configuration.'
             Check (($output -join '\n') -match ('PASS: AI=' + $effectiveSide + 'P suspended-only')) 'Native launcher selected a different side than JSON.'
             $verifiedSides[$effectiveSide] = $true
         }
@@ -210,7 +243,7 @@ if ($hasAuthorizedKey) {
         Check (($lastPrepareLog -match '1P接管key未通过') -eq ($attempt.effective -eq 2)) 'Key sequence fallback hint does not match effective side.'
         Check ($settings.ai.side -eq 1 -and $settings.practice.player1_no_damage -and $settings.practice.player1_invincible) 'Key sequence changed saved request/protection fields.'
     }
-    $variants = @((' ' + $AuthorizedKey), ($AuthorizedKey + ' '), ($AuthorizedKey + "`n"))
+    $variants = @((' ' + $AuthorizedKey), ($AuthorizedKey + ' '), ($AuthorizedKey + "`n"), ($AuthorizedKey + [char]0))
     if ($AuthorizedKey.ToUpperInvariant() -cne $AuthorizedKey) { $variants += $AuthorizedKey.ToUpperInvariant() }
     if ($AuthorizedKey.ToLowerInvariant() -cne $AuthorizedKey) { $variants += $AuthorizedKey.ToLowerInvariant() }
     foreach ($variant in $variants) {
@@ -267,4 +300,5 @@ if ($VerifySuspended) {
 Check ([IO.File]::ReadAllText($settingsPath) -notmatch 'side_key') 'Temporary side key was left in fixture JSON.'
 Write-Output "PASS: $checks AI-side launcher checks in $runs real PS5.1 preparation runs; $($verifiedSides.Count) suspended native checks; no playable game launched."
 if (-not $hasAuthorizedKey) { Write-Output 'SKIP: authorized-key cases require -AuthorizedKey or TH09_TEST_SIDE_KEY; fallback cases passed.' }
+if (-not $hasRetiredKey) { Write-Output 'SKIP: retired-key rotation case requires -RetiredKey or TH09_TEST_RETIRED_SIDE_KEY.' }
 Write-Output "Evidence: $fixture"

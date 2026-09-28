@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)] [string] $SourceGame,
     [Parameter(Mandatory = $true)] [string] $SourceConfig,
     [string] $ProjectRoot = '',
@@ -58,7 +58,7 @@ function New-Package([string] $Directory) {
     foreach ($name in @('th09ai-launcher.exe', 'window_support.dll')) {
         [IO.File]::Copy((Join-Path $PackageRoot ('runtime\' + $name)), (Join-Path $Directory ('runtime\' + $name)))
     }
-    [IO.File]::Copy((Join-Path $project 'vendor\release\ka_ai_duka\inject.dll'), (Join-Path $Directory 'runtime\inject.dll'))
+    [IO.File]::Copy((Join-Path $project 'dist\TH09-AI\runtime\inject.dll'), (Join-Path $Directory 'runtime\inject.dll'))
     [IO.File]::Copy((Join-Path $project 'src\ai\main.lua'), (Join-Path $Directory 'ai\main.lua'))
     [IO.File]::Copy((Join-Path $PackageRoot 'launcher-settings.json'), (Join-Path $Directory 'launcher-settings.json'))
     return $Directory

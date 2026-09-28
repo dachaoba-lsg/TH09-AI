@@ -7,9 +7,22 @@ $runtime = Join-Path $PSScriptRoot 'dist\TH09-AI\runtime'
 $testOutput = Join-Path $PSScriptRoot 'work\native-tests'
 [IO.Directory]::CreateDirectory($runtime) | Out-Null
 [IO.Directory]::CreateDirectory($testOutput) | Out-Null
-& $CompilerPath -Wall -Werror (Join-Path $native 'launcher.c') -o (Join-Path $runtime 'th09ai-launcher.exe') -lshell32 -luser32
+& $CompilerPath -Wall -Werror (Join-Path $native 'inject_guard_builder.c') -o (Join-Path $testOutput 'inject_guard_builder.exe') -lshell32
+if ($LASTEXITCODE -ne 0) { throw 'Input authorization guard builder compilation failed.' }
+$guardOutput = Join-Path $testOutput 'inject.guarded.dll'
+& (Join-Path $testOutput 'inject_guard_builder.exe') (Join-Path $runtime 'inject.dll') $guardOutput
+if ($LASTEXITCODE -ne 0) { throw 'Input authorization guard validation/build failed.' }
+if ((Get-FileHash -LiteralPath $guardOutput -Algorithm SHA256).Hash -ne '3F7499B450787EBD603FBA73F31528CB852D16CD430A6395F5C38759CEDEF376') {
+    throw 'Unexpected guarded runtime hash; refusing to publish it.'
+}
+[IO.File]::Copy($guardOutput, (Join-Path $runtime 'inject.dll'), $true)
+& $CompilerPath -Wall -Werror (Join-Path $native 'side_key_auth_selftest.c') -o (Join-Path $testOutput 'side_key_auth_selftest.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Native key verifier self-test compilation failed.' }
+& (Join-Path $testOutput 'side_key_auth_selftest.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Native key verifier self-test failed.' }
+& $CompilerPath -Wall -Werror (Join-Path $native 'launcher.c') (Join-Path $native 'side_key_auth.c') -o (Join-Path $runtime 'th09ai-launcher.exe') -lshell32 -luser32
 if ($LASTEXITCODE -ne 0) { throw 'Native launcher compilation failed.' }
-& $CompilerPath -shared -Wall -Werror -o (Join-Path $runtime 'window_support.dll') (Join-Path $native 'window_resize.c') (Join-Path $native 'window_support.c') (Join-Path $native 'practice_patches.c') (Join-Path $native 'laser_sensor.c') (Join-Path $native 'player_sensor.c') (Join-Path $native 'enemy_sensor.c') -luser32 -lkernel32
+& $CompilerPath -shared -Wall -Werror -o (Join-Path $runtime 'window_support.dll') (Join-Path $native 'window_resize.c') (Join-Path $native 'window_support.c') (Join-Path $native 'side_key_auth.c') (Join-Path $native 'practice_patches.c') (Join-Path $native 'laser_sensor.c') (Join-Path $native 'player_sensor.c') (Join-Path $native 'enemy_sensor.c') -luser32 -lkernel32
 if ($LASTEXITCODE -ne 0) { throw 'Native window module compilation failed.' }
 & $CompilerPath -Wall -Werror -o (Join-Path $testOutput 'window_resize_selftest.exe') (Join-Path $native 'window_resize.c') (Join-Path $native 'window_resize_selftest.c') -luser32 -lkernel32
 if ($LASTEXITCODE -ne 0) { throw 'Native window self-test compilation failed.' }

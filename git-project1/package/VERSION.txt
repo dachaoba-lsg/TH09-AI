@@ -1,14 +1,16 @@
-TH09-AI 0.1.9
+TH09-AI 0.1.9.2
 
 Author: 圣诞老人的驯鹿-xunlu
-Release: first Medicine-poison test package; read-only effective-speed/protection/recharge sensing and corresponding route prediction
-Upgrade: use the full 0.1.9 package; replacing dodge.lua alone is insufficient; retain the 0.1.8 ZIP separately
+Release: movement-only dense-poison escape; soft poison risk and a bounded escape target, with immediate collision avoidance first
+Movement defaults: dodge.poison_navigation enabled=true, risk_weight=80, progress_weight=6, replan_frames=12; disabling restores prior movement preferences, not poison-blind speed
+Diagnostics: 42 CSV columns including 8 Lua-only poison-navigation fields; native sensor interface unchanged
+Upgrade: use the full 0.1.9.2 package; retain 0.1.9 and earlier ZIPs separately; existing game installations are not automatically replaced
 
 Runtime: ka_ai_duka 1.7 (unmodified upstream binaries)
 Native launcher: checked in-memory input isolation
 Native support: window recreation recovery and edge/corner resizing; optional 1P practice protection
 Laser sensor: checked in-memory upstream export hook corrects raw.length1 origin offset; game laser physics/HP and original disk DLL unchanged
-Poison/state sensing: nonlethal slowing terrain and protection-expiry awareness; no 2P HP or protection modification
+Poison/state sensing: unchanged 0.1.9 native apiVersion 1; no new native fields, 2P HP changes, poison removal or protection modification
 State contract: apiVersion 1 valid snapshot required; invalid/missing snapshots release all AI input and report an error
 Protection: diagnostic remaining value is raw; avoidance uses max(floor(raw)-1,0); unknown states grant no assumed protection
 Supported game: Japanese TH09 v1.50a
@@ -19,7 +21,10 @@ Battle limit: launcher-settings.json top-level seconds, default 600; integer 0-8
 Timing: AI battle callbacks / 60; pause-menu scheduling not separately verified; stop remains latched until next battle
 Practice: 1P no-damage preserves exact HP; invincible takes precedence; both default false
 Unchanged: random C1-C4, insufficient-energy tap shots, 500000-point Z lock, no X, timing/input isolation/practice/window rules
-Known limitations: first poison test build; no adaptive proactive C, high-level energy planning or dedicated time-stop strategy; no guaranteed survival
-Completed checks: native sensor/selftests, real x86 bridges, input isolation, practice patches, suspended startup, launcher/path regression and JSON-to-Lua callback-limit integration
-Acceptance: suspended tests created no game window or input; no new 0.1.9 real-battle acceptance; player Medicine testing required
+Known limitations: bounded local movement policy, not forced constant motion; no training, adaptive proactive C, high-level energy planning or dedicated time-stop strategy; no guaranteed survival
+Historical checks: 0.1.9 native sensor/selftests, real x86 bridges, input isolation, practice patches, suspended startup, launcher/path regression and JSON-to-Lua callback-limit integration
+Current checks: 13 navigation groups, 11 navigation benchmarks, ordinary/laser/poison-speed regressions, 3 prior performance suites, mock AI, 42-column CSV and 1440-state random-C parity passed; native/ABI/input/practice/suspended/launcher/path/timer checks repeated and passed
+Package checks: public ZIP and source-rebuild results are recorded in the release delivery test report
+Performance limit: bounded 128 probes / 172 risk samples does not guarantee game FPS; extreme synthetic timings can exceed 16.67 ms
+Acceptance: two 0.1.9 poison recordings reported repeated stopping and no relocation after bullet clears; new 0.1.9.2 real-battle player testing required
 Feedback: video plus ai/ai_debug.csv and runtime/native-window.log; existing game installations not automatically replaced by packaging

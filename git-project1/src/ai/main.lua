@@ -41,7 +41,7 @@ local debug_file = nil
 if config.debug_log then
   debug_file = io.open("ai_debug.csv", "w")
   if debug_file then
-    debug_file:write("frame,x,y,life,spell_point,combo,current_charge,max_charge,target_level,spell_locked,timed_out,move,move_cost,warning_lasers,bullets,enemies,ex_attacks,dodge_ms,objects_relevant,trajectory_tests,laser_count,tracked_lasers,dynamic_lasers,laser_sweep_tests,laser_history_resets,sensor_valid,move_scale_x,move_scale_y,protection_frames,can_charge,charge_block_frames,poison_clouds,movement_segments,player_state\n")
+    debug_file:write("frame,x,y,life,spell_point,combo,current_charge,max_charge,target_level,spell_locked,timed_out,move,move_cost,warning_lasers,bullets,enemies,ex_attacks,dodge_ms,objects_relevant,trajectory_tests,laser_count,tracked_lasers,dynamic_lasers,laser_sweep_tests,laser_history_resets,sensor_valid,move_scale_x,move_scale_y,protection_frames,can_charge,charge_block_frames,poison_clouds,movement_segments,player_state,poison_nav_active,poison_level,poison_risk,poison_cost,poison_target_x,poison_target_y,poison_probe_count,poison_nav_samples\n")
   end
 end
 
@@ -141,7 +141,7 @@ local function writeDebug(game_side, player, movement)
   end
   local sensor = player.sensor or {}
   debug_file:write(string.format(
-    "%d,%.3f,%.3f,%d,%d,%d,%.3f,%.3f,%s,%s,%s,%s,%.4f,%d,%d,%d,%d,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f,%.3f,%s,%.3f,%d,%d,%d\n",
+    "%d,%.3f,%.3f,%d,%d,%d,%.3f,%.3f,%s,%s,%s,%s,%.4f,%d,%d,%d,%d,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f,%.3f,%s,%.3f,%d,%d,%d,%d,%d,%.4f,%.4f,%.3f,%.3f,%d,%d\n",
     state.frame,
     player.x or 0,
     player.y or 0,
@@ -175,7 +175,15 @@ local function writeDebug(game_side, player, movement)
     sensor.chargeBlockFrames or 0,
     movement.poison_clouds or 0,
     movement.movement_segments or 0,
-    sensor.state or -1
+    sensor.state or -1,
+    movement.poison_nav_active or 0,
+    movement.poison_level or 0,
+    movement.poison_risk or 0,
+    movement.poison_cost or 0,
+    movement.poison_target_x or 0,
+    movement.poison_target_y or 0,
+    movement.poison_probe_count or 0,
+    movement.poison_nav_samples or 0
   ))
   debug_file:flush()
 end
@@ -213,6 +221,7 @@ function main()
   if ChargeType and ChargeType.Charge ~= nil and game_side.chargeType == ChargeType.Charge then
     keys.send(0, false)
     state.laser_history, state.last_move_key = nil, nil
+    state.poison_navigation = nil
     if not state.charge_mode_fault_reported then
       print("TH09-AI: unsupported 2P Charge Type. Select Slow (hold Z to charge, Shift for slow movement) in the game options; AI input released.")
       state.charge_mode_fault_reported = true
@@ -225,8 +234,9 @@ function main()
   if not validSensor(player.sensor) then
     keys.send(0, false)
     state.laser_history, state.last_move_key = nil, nil
+    state.poison_navigation = nil
     if not state.sensor_fault_reported then
-      print("TH09-AI: player sensor unavailable/invalid; AI input released. Use the complete matching 0.1.9 package and inspect runtime/native-window.log.")
+      print("TH09-AI: player sensor unavailable/invalid; AI input released. Use the complete matching 0.1.9.2 package and inspect runtime/native-window.log.")
       state.sensor_fault_reported = true
     end
     return

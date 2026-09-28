@@ -1,5 +1,5 @@
 ﻿param(
-    [string] $Version = '3.5.0-test',
+    [string] $Version = '3.7.0-test',
     [switch] $Overwrite,
     [string] $PackageName = 'DS-TH09-AI',
     [string] $ZipBase = ''
@@ -62,6 +62,8 @@ foreach ($required in @('src\ai\main.lua', 'src\ai\config.lua', 'src\ai\dodge.lu
     'src\native\launcher.c', 'src\native\window_support.c', 'src\native\window_resize.c',
     'src\native\window_resize.h', 'src\native\window_resize_selftest.c', 'src\native\input_patches.h',
     'src\native\ai_side_config.h', 'src\native\ai_input_patches.h',
+    'src\native\side_key_auth.c', 'src\native\side_key_auth.h',
+    'src\native\side_key_auth_selftest.c', 'src\native\inject_guard_builder.c',
     'src\native\practice_patches.c', 'src\native\practice_patches.h',
     'src\native\laser_sensor.c', 'src\native\laser_sensor.h',
     'src\native\laser_sensor_selftest.c', 'src\native\player_sensor.c',
@@ -91,7 +93,7 @@ foreach ($relative in $files) {
     $target = Join-Path $stageRoot $relative
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
     $source = Join-Path $project $relative
-    # Release source has its own standalone rebuild workflow.
+    # The standalone source archive must not depend on Git-only wrappers.
     if ($relative -eq 'README.md') { $source = Join-Path $project 'PUBLIC-SOURCE-BUILD.md' }
     if ([IO.Path]::GetExtension($relative) -in @('.ps1', '.cmd')) {
         $content = [IO.File]::ReadAllText($source) -replace '\r?\n', "`r`n"

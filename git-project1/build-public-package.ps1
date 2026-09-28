@@ -1,9 +1,9 @@
 ﻿param(
-    [string] $Version = '0.1.9',
+    [string] $Version = '0.1.9.2',
     [switch] $Overwrite
 )
 $ErrorActionPreference = 'Stop'
-if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid package version.' }
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-z0-9]+)?\z') { throw 'Invalid package version.' }
 $project = [IO.Path]::GetFullPath($PSScriptRoot)
 $dist = Join-Path $project 'dist\TH09-AI'
 $zipPath = Join-Path $project ('dist\TH09-AI-v' + $Version + '.zip')
@@ -49,7 +49,7 @@ foreach ($relative in @('src\ai', 'src\launcher', 'src\native')) {
         if ($include) { $files.Add((Join-Path $relative $file.Name)) }
     }
 }
-foreach ($required in @('src\ai\main.lua', 'src\ai\config.lua', 'src\ai\dodge.lua', 'src\ai\keyutils.lua',
+foreach ($required in @('src\ai\main.lua', 'src\ai\config.lua', 'src\ai\dodge.lua', 'src\ai\keyutils.lua', 'src\ai\poison_navigation.lua',
     'src\launcher\prepare-and-start.ps1', 'src\launcher\prepare-input.ps1',
     'src\native\launcher.c', 'src\native\window_support.c', 'src\native\window_resize.c',
     'src\native\window_resize.h', 'src\native\window_resize_selftest.c', 'src\native\input_patches.h',

@@ -1,3 +1,57 @@
+# Native authorization boundary: 3.6.1-test
+
+launcher.c verifies the input key before CreateProcess. window_support.c
+independently verifies it in a worker, outside DllMain, and publishes its
+read-only Th09NativeSideAuthorized export only after actual-1P initialization
+fully succeeds. side_key_auth.c uses system CNG PBKDF2-HMAC-SHA256, with the
+same 600000-iteration public salt/verifier as the script; no proof boolean or
+copied digest grants access. The temporary TH09_AI_SIDE_KEY environment input
+is cleared in the launcher after child creation and in the support worker.
+The public configuration remains side=2 and an empty key.
+
+inject_guard_builder.c produces a canonical guarded inject.dll from the
+verified upstream binary, or strictly validates the same guarded output when
+rebuilding a package. It gates Lua_SendKey1P before any original instruction,
+preserving old RVAs, register/stack state and relocations. Missing helper,
+missing export or a result other than exactly 1 returns without writing 1P.
+Only authorization checks change; physical mappings and 2P behavior remain.
+Do not mix this guarded DLL with older helper/launcher modules.
+
+The guard does not stop source recompilation, substituted DLLs, arbitrary
+process-memory modification or use of an older distribution. It closes the
+script/INI and alternate-loader bypasses against the supplied native modules.
+Use only suspended owned-process and relocated x86 fixture tests during
+development; do not resume the user's game for validation.
+
+---
+
+# Historical native descriptions (3.6 and earlier)
+
+# DS-TH09-AI native support: 3.6.0-test
+
+Version 3.6 changes launcher key verification and Lua diagnostics only.
+Native C/H sources, input mapping and combat policies remain as in 3.5.
+
+Requested 1P requires the newly designated key. The launcher stores a versioned
+PBKDF2-HMAC-SHA256 verifier with a random 128-bit salt, 600000 iterations and a
+256-bit derived value. No old fast-hash verifier fallback is accepted.
+Windows PowerShell 5.1 and .NET Framework 4.7.2+ are required for the explicit
+SHA256 KDF overload. Missing APIs or crypto errors resolve to effective 2P.
+The KDF runs only at startup when 1P is requested; there is no per-frame cost.
+Missing/wrong/invalid keys resolve to 2P before INI and practice handling.
+Public defaults remain side=2 and side_key="". No key is sent to Lua or INI.
+This raises guessing cost, but cannot stop a source owner bypassing the gate.
+Old packages keep their original behavior; this release does not revoke them.
+
+CSV now has 182 columns, preserving the first 169 from 3.5. New character,
+scan-admission and timing diagnostics do not change combat decisions.
+
+---
+
+# 3.5及更早版本历史说明
+
+以下只适用于对应历史版本；旧SHA256 key规则由上方3.6规则取代。
+
 # DS-TH09-AI native support: 3.5.0-test
 
 Version 3.5 adds read-only enemy.combat metadata after the verified upstream

@@ -1,4 +1,4 @@
-# DS-TH09-AI 3.5.0-test：源码构建
+# DS-TH09-AI 3.7.0-test：源码构建
 
 本页适用于 Git 源码仓库。完整玩家 ZIP 中的 `source/rebuild-from-package.ps1` 是另一条重建入口，需要保留 ZIP 的外层运行库、许可和文档；不要单独拿出它代替本仓库入口。
 
@@ -23,10 +23,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 入口调用 `scripts/prepare-dependencies.ps1`，下载锁定版本的上游运行库并核对 SHA-256，放入本地 `vendor/`。校验失败时应检查下载和锁定信息，不要跳过校验。随后从 `src/native/` 编译本项目的启动器与支持模块，执行原生自测，把 `src/ai/`、`src/launcher/`、`package/` 和 `licenses/` 组装成发行包并运行公开包验收。
 
-默认版本为 `3.5.0-test`。产物为：
+默认版本为 `3.7.0-test`。产物为：
 
 ```text
-dist/DS-TH09-AI-v3.5.0-test.zip       含运行文件、项目源码及第三方材料的发行 ZIP
+dist/DS-TH09-AI-v3.7.0-test.zip       含运行文件、项目源码及第三方材料的发行 ZIP
 dist/TH09-AI/                 构建暂存目录
 work/                        自测、临时文件和构建记录
 vendor/                      已校验的上游依赖缓存
@@ -35,7 +35,7 @@ downloads/                   已校验的下载归档缓存
 
 ZIP 外层包名为 `DS-TH09-AI`。生成过程不安装到游戏目录，也不启动游戏。原生窗口自测可能创建自己的隐藏测试窗口。
 
-已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '3.5.0-local'` 标识自己的构建，这不表示原发行者审核了修改。
+已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '3.7.0-local'` 标识自己的构建，这不表示原发行者审核了修改。
 
 ## 离线重建
 
@@ -47,7 +47,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 `-SkipDependencyDownload` 只禁止下载，仍检查本地依赖是否符合要求。缺失文件或哈希不符会失败，不能用空文件或其他版本替代。
 
-`inject.dll` 和旧 `ka_ai_duka.exe` 按锁定的上游发行版本原样使用。这里可重建的是本项目 Lua、启动脚本及原生模块，不能把构建成功描述成已从本项目源码重编译全部上游运行库。
+依赖缓存中的上游 `inject.dll` 和 `ka_ai_duka.exe` 先按锁定哈希核验。构建工具 `inject_guard_builder.c` 从前者确定性生成带 1P 授权保护的发行 DLL；后者保持上游文件。原生构建同时校验 guard 的预期 SHA-256。随包重建支持严格核验已带 guard 的同版 DLL；构建无需有效 1P key，不能描述为从本项目源码重编译全部上游 C++ 运行库。
 
 ## Lua 回归
 
@@ -64,13 +64,19 @@ python tests/run_all_lua.py
 
 ## 可选：C1 原程序与接管侧校验
 
-默认构建会执行窗口、激光、player/enemy sensor 原生自测。`tests/reimu_c1_test.lua` 和 `tests/c1_planning_test.lua` 已纳入统一 Lua 入口。
+默认构建会执行 key 校验实现、窗口、激光、player/enemy sensor 原生自测，并生成/核验 1P 输入 guard。`tests/reimu_c1_test.lua` 和 `tests/c1_planning_test.lua` 已纳入统一 Lua 入口。
 
 `native_enemy_sensor_test.py`、`native_player_sensor_test.py` 可对已校验的上游运行库进行隔离 x86 ABI 测试；`native_reimu_combat_test.py --game-exe <th09.exe>` 只读取自己持有的兼容游戏文件，在 Unicorn 合成内存内校验 C1 机制，不启动游戏。需要额外的 `pefile`、`unicorn`，可安装在 `work/input-fix/python/`。
 
 `reimu_c1_native_fixture_test.py --player <player.json> --enemy <enemy.json>` 读取原生自测生成的本地 fixture；游戏数据与 fixture 不随源码发布，未提供时不属于默认回归。
 
 `ai_side_launcher_test.ps1 -SourceGameRoot <游戏目录>` 测试配置回退；完整有效 key 路径可通过进程环境变量 `TH09_TEST_SIDE_KEY` 提供。不要把有效 key 写入命令脚本、公开测试样例或提交文件。可选 `-VerifySuspended` 只校验自己的复制进程，绝不恢复游戏主线程。它们都不属于无需游戏的默认构建。
+
+## 3.7 救场与安全回归
+
+统一 Lua 入口包含 `rescue_pressure_test.lua`、`rescue_c2_test.lua`、`rescue_integration_test.lua`，覆盖有限感知证据、真实储量/动作门、释放确认/超时、冷却与菜单配置传播。未公开历史快照的逐项旧行为比较属于可选对照，缺失不代表执行过该对照。
+
+`side_key_security_test.ps1`、`native_auth_bypass_test.ps1` 和 `inject_guard_test.py` 保留 3.6.1 的安全回归；部分完整路径需要自备游戏和私有 key，均不属于普通无游戏构建。测试凭据只从专用临时环境变量提供，禁止写入公开源码或报告。修改脚本或 INI 不能越过本版原生授权；源码重编译和二进制替换不属于不可绕过的本地信任边界。
 
 ## 可选：真实启动配置集成测试
 

@@ -6,12 +6,21 @@
 #include "enemy_sensor.h"
 #include "ai_side_config.h"
 #include "ai_input_patches.h"
+#include "side_key_auth.h"
 #include <stdio.h>
 #include <string.h>
 
 static HMODULE g_module;
 static wchar_t g_ini[MAX_PATH];
 static wchar_t g_log[MAX_PATH];
+static volatile LONG g_side1_authorized;
+
+/* Read-only authorization result for the 1P input boundary. There is no
+   exported setter and neither INI fields nor script booleans can grant it. */
+__declspec(dllexport) int Th09NativeSideAuthorized(void)
+{
+    return InterlockedCompareExchange(&g_side1_authorized, 0, 0) == 1;
+}
 
 static void native_log(const char *message)
 {
@@ -77,7 +86,7 @@ static DWORD WINAPI window_worker(void *unused)
     wchar_t event_name[96];
     HANDLE ready, failed;
     BOOL practice_ok = FALSE, sensor_ok = FALSE, player_sensor_ok = FALSE, enemy_sensor_ok = FALSE;
-    int no_damage, invincible, ai_side;
+    int no_damage, invincible, ai_side = 0;
     (void)unused;
     wsprintfW(event_name, L"Local\\TH09AI-Support-%lu-Ready", GetCurrentProcessId());
     ready = OpenEventW(EVENT_MODIFY_STATE, FALSE, event_name);
@@ -92,7 +101,12 @@ static DWORD WINAPI window_worker(void *unused)
     wcscat(g_ini, L"ka_ai_duka.ini");
     ai_side = Th09ReadAiSide(g_ini);
     if (!ai_side || !ai_input_matches_side(ai_side)) {
+        SetEnvironmentVariableW(L"TH09_AI_SIDE_KEY", NULL);
         native_log("ai-input: invalid side configuration or selected-side patch mismatch");
+        goto initialized;
+    }
+    if (!Th09AuthorizeSideFromEnvironment(ai_side, TRUE)) {
+        native_log("ai-authorization: independent native verification failed; input not authorized");
         goto initialized;
     }
     sprintf(text, "ai-input: verified AI=%dP exclusive; human=%dP unchanged", ai_side, 3 - ai_side);
@@ -124,6 +138,11 @@ static DWORD WINAPI window_worker(void *unused)
     if (!enemy_sensor_ok) goto initialized;
     practice_ok = Th09PracticeInstall(no_damage != 0, invincible != 0, native_log);
 initialized:
+    SetEnvironmentVariableW(L"TH09_AI_SIDE_KEY", NULL);
+    /* Readiness alone is not authorization. Publish only after this module's
+       key check and every native gate succeeded, before the game can resume. */
+    if (practice_ok && sensor_ok && player_sensor_ok && enemy_sensor_ok && ai_side == 1)
+        InterlockedExchange(&g_side1_authorized, 1);
     if (practice_ok && sensor_ok && player_sensor_ok && enemy_sensor_ok) { if (ready) SetEvent(ready); }
     else { if (failed) SetEvent(failed); }
     if (ready) CloseHandle(ready);

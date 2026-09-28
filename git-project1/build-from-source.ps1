@@ -9,7 +9,7 @@ $projectRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $metadata = Get-Content -LiteralPath (Join-Path $projectRoot 'project.json') -Raw | ConvertFrom-Json
 if (-not $Version) { $Version = [string]$metadata.version }
 $packageName = [string]$metadata.name
-if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid version.' }
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-z0-9]+)?\z') { throw 'Invalid version.' }
 if ($packageName -notmatch '^[A-Za-z0-9_-]+$') { throw 'Invalid project package name.' }
 if (-not [IO.Path]::IsPathRooted($CompilerPath) -or -not [IO.File]::Exists($CompilerPath)) {
     throw 'CompilerPath must point to tcc.exe in a complete TinyCC 0.9.27 i386 Windows installation.'

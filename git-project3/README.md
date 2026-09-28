@@ -1,4 +1,4 @@
-# DS-TH09-AI 3.5.0-test
+# DS-TH09-AI 3.7.0-test
 
 简明功能与逻辑见 [版本说明](版本功能与逻辑说明.md)。
 
@@ -10,17 +10,23 @@
 
 | 源码目录 | 版本 | 主要用途 |
 | --- | --- | --- |
-| git-project1 | 0.1.9 | 第一代避弹、随机 C、毒与激光感知 |
+| git-project1 | 0.1.9.2 | 第一代避弹、随机 C，主动寻找低毒浓度安全区 |
 | git-project2 | 2.0.7 | 以 C1/C2、固灵和连爆资源经营为核心的开花测试 |
-| git-project3 | 3.5.0-test | 灵梦 C1 血量／固灵／追踪修复，以及可选接管侧与玩家能力设置 |
+| git-project3 | 3.7.0-test | 改善对文高速弹压力判断，提前准备保命 C2，保留玩家能力设置 |
 
 三者是独立源码快照，配置和发行文件应与各自版本配套。本文说明第三代的现行行为。
 
-## 3.5：灵梦 C1 与接管侧
+## 3.7：对文高速弹压力与保命 C2
+
+本次修复围绕“文的高速弹来不及处理”：在现有圆形视野和注意力范围内，根据持续的可见拥挤、额度不足和已识别威胁下安全路线减少，提前准备保命 C2。它允许收益不理想的一次防守释放，但仍要求实际储量至少 200、真实蓄力与动作门；使用原生释放确认、超时、恢复和冷却，避免反复浪费能量。没有扩大视野，也不会使用未跟踪子弹的精确碰撞时间；所有角色共用策略，不能保证所有高速弹都被看清或必定存活。
+
+`set-difficulty.cmd` 的菜单、操作与保存方式不变，四项能力预算不变。unlimited（含 infinite 别名）默认 `plan_interval=1`，其他档位和 custom 默认 6；已有 JSON 明确设置的值继续优先，菜单不会改写它。采用档位默认值时只需删除 `ai.plan_interval`；保留旧值也是支持的配置。输入映射与 3.6.1 原生 1P 授权保持。
+
+## 保留的灵梦 C1 与接管侧
 
 灵梦 C1 结合目标的实时血量、实际固灵状态、非贯穿符札的首次碰撞和展开后追踪路径，估计是否足以起爆；计入剩余蓄力时间，并在蓄力过程中复核原来的起爆目标。目标失效时按充能阶段取消或短暂等待，避免错误升级 C2。请求 Shift 不等于成功固灵；未固灵的灵不能直接作为 C1 起爆种子。所有目标判断继续受圆形视野限制，不能保证每次预测都成功。
 
-默认 `ai.side=2`、`ai.side_key=""`。在 `launcher-settings.json` 现有 `ai` 对象内设置 `side=1` 并填写获得的正确 key，才会接管 1P；key 缺失、错误或类型不符时实际使用 2P，不修改保存的请求。key 不写入生成的 INI、Lua 或日志。此为本地配置门槛，修改源码可以绕过，不是在线授权。`side` 本身必须是数字 1 或 2，非法值会停止启动。`ai.enabled` 仍仅是注意力开关。
+默认 `ai.side=2`、`ai.side_key=""`。在 `launcher-settings.json` 现有 `ai` 对象内设置 `side=1` 并填写获得的正确 key，才会接管 1P；key 缺失、错误或类型不符时实际使用 2P，不修改保存的请求。key 不写入生成的 INI、Lua 或日志。校验使用带盐 PBKDF2-HMAC-SHA256，启动器、支持模块和最终 1P 写键入口均执行原生授权约束；仅删除脚本校验或伪造 INI 不能授权本版原生模块。重编译/替换二进制仍可改变本地程序，它不是在线授权。`side` 本身必须是数字 1 或 2，非法值会停止启动。`ai.enabled` 仍仅是注意力开关。
 
 物理键位保持 1P 方向键／Z／X／Shift，2P WASD／J／K／L。只隔离实际 AI 侧的战斗键盘输入；被接管侧必须选 `Charge Type=Slow`。实际 AI 为 1P 时抑制原有 1P 练习保护，不转移给 2P；回到 AI=2P 时恢复按保存配置保护玩家 1P。完整说明见 [玩家说明](package/README.md)。
 
@@ -67,7 +73,7 @@
 
 C1 的几何覆盖和预计连爆不等于确认击杀或回能；部分自定义攻击仍使用有限模型。原生感知不改变游戏子弹生成、碰撞物理或 AI 的 HP、能量。离线回归不能代替实战验证。
 
-调试 CSV 为 169 列：保留原 162 列，追加 C1 准备延迟、血量模型、阻挡和目标复核诊断；原始对象数量及圈内/圈外计数保留作对照；`field_erasable` 和链条收益来自圈内快照。分析旧日志时应核对版本和列定义。
+调试 CSV 为 197 列：保留原 182 列，末尾追加 15 列救场状态、原因、确认及路线证据；原始对象数量、圈内/圈外计数及 C1 诊断保留作对照；`field_erasable` 和链条收益来自圈内快照。分析旧日志时应核对版本和列定义。
 
 ## 从源码构建
 
@@ -77,7 +83,7 @@ C1 的几何覆盖和预计连爆不等于确认击杀或回能；部分自定�
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 -CompilerPath 'C:\tools\tcc\tcc.exe'
 ```
 
-入口准备固定版本且校验哈希的上游依赖，构建本项目原生模块，执行原生自测并验收发行包。输出为 `dist/DS-TH09-AI-v3.5.0-test.zip`，不会自动安装或启动游戏。完整依赖、离线构建和测试方法见 [BUILDING.md](BUILDING.md)。
+入口准备固定版本且校验哈希的上游依赖，构建本项目原生模块，执行原生自测并验收发行包。输出为 `dist/DS-TH09-AI-v3.7.0-test.zip`，不会自动安装或启动游戏。完整依赖、离线构建和测试方法见 [BUILDING.md](BUILDING.md)。
 
 玩家使用方法见 [package/README.md](package/README.md)。完整发行包可放在 GitHub Releases；`dist/`、`vendor/`、`downloads/`、`work/` 是本地生成目录，不作为源码提交。
 
@@ -93,6 +99,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 | `scripts/` | 固定依赖准备脚本 |
 | `licenses/` | 第三方许可、TinyCC 对应源码与说明 |
 
-原创部分的许可见 [LICENSE.txt](LICENSE.txt)，第三方组件各自遵守 [licenses/THIRD_PARTY_NOTICES.txt](licenses/THIRD_PARTY_NOTICES.txt) 及相应许可。项目 MIT 不替代上游组件的许可。上游 `inject.dll` 和 `ka_ai_duka.exe` 来自未修改的发行文件，本项目构建命令不重新编译这两个上游文件。
+原创部分的许可见 [LICENSE.txt](LICENSE.txt)，第三方组件各自遵守 [licenses/THIRD_PARTY_NOTICES.txt](licenses/THIRD_PARTY_NOTICES.txt) 及相应许可。项目 MIT 不替代上游组件的许可。上游 `ka_ai_duka.exe` 保持原发行文件；`inject.dll` 以核验过的上游文件为基础，由公开的 `inject_guard_builder.c` 确定性追加 1P 授权入口保护。构建没有从 C++ 源码重新编译上游库，也没有更改其许可归属。
 
 贡献和问题报告见 [CONTRIBUTING.md](CONTRIBUTING.md)。开发历史保存在 [docs/DEVELOPMENT-HISTORY.md](docs/DEVELOPMENT-HISTORY.md)，其中旧版说明不覆盖本页和当前代码。

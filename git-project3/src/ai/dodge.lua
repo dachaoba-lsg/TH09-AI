@@ -373,6 +373,13 @@ local function unprotectedInterval(first, last, start, protected_until)
   return max(first, protected_until - start), last
 end
 
+-- Record timing only where the existing scorer has already confirmed a hard,
+-- unprotected contact. This adds no object lookup or new geometric forecast.
+local function hardCollision(candidate, first, start)
+  candidate.collides = true
+  candidate.first_collision = min(candidate.first_collision or INF, start + first)
+end
+
 local function scoreExposure(candidate, first, last, near_first, near_last, start, horizon, soft, cfg, protected_until, active_until)
   local endpoint = not soft and protected_until > horizon and first and start + last >= horizon
   if not soft and protected_until > 0 then
@@ -381,7 +388,7 @@ local function scoreExposure(candidate, first, last, near_first, near_last, star
   end
   if first and not soft and active_until and start + first >= active_until then first, last = nil, nil end
   local collision = exposure(first, last, start, horizon)
-  if first and not soft then candidate.collides = true end
+  if first and not soft then hardCollision(candidate, first, start) end
   local near = exposure(near_first, near_last, start, horizon)
   candidate.danger = candidate.danger + collision * (soft and cfg.warning_laser_cost or cfg.collision_cost)
     + max(0, near - collision) * cfg.near_miss_cost
@@ -528,7 +535,7 @@ local function dynamicLaser(player, body, motion, candidates, cfg, stats)
               part.soft, cfg, candidates.protected_until, zero_height)
           else
             local collision = exposure(first, last, first_time, horizon)
-            if first and not part.soft then candidate.collides = true end
+            if first and not part.soft then hardCollision(candidate, first, first_time) end
             local near = exposure(near_first, near_last, first_time, horizon)
             candidate.danger = candidate.danger + collision * (part.soft and cfg.warning_laser_cost or cfg.collision_cost)
               + max(0, near - collision) * cfg.near_miss_cost
@@ -635,7 +642,7 @@ local function scoreObject(player, object, kind, candidates, cfg, stats, previou
           warning, cfg, candidates.protected_until)
       else
         local collision = exposure(first, last, segment.start, h)
-        if first and not warning then candidate.collides = true end
+        if first and not warning then hardCollision(candidate, first, segment.start) end
         local near = exposure(near_first, near_last, segment.start, h)
         candidate.danger = candidate.danger + collision * (warning and cfg.warning_laser_cost or cfg.collision_cost)
           + max(0, near - collision) * cfg.near_miss_cost
@@ -893,7 +900,8 @@ local function planAttention(player, game_side, cfg, a, state, reach)
   end
   local previous = state.attention_set or {}
   local seen = { bullet = {}, ex = {} }
-  local result = { seen = seen, tracked = 0, blind = 0 }
+  local result = { seen = seen, tracked = 0, blind = 0, scanned = false,
+    waiting_scan_count = 0, credit_blocked_count = 0, capacity_blocked_count = 0 }
 
   -- Free categories are always visible: warning/real lasers are few and huge,
   -- the Medicine field is terrain, and objects with an unusable velocity must
@@ -950,6 +958,7 @@ local function planAttention(player, game_side, cfg, a, state, reach)
   -- moment after the last look.
   local last = state.attention_scan_frame
   if last == nil or frame - last >= interval or frame < last then
+    result.scanned = true
     state.attention_scan_frame = frame
     local ordered = {}
     for _, entry in ipairs(entries) do
@@ -989,6 +998,13 @@ local function planAttention(player, game_side, cfg, a, state, reach)
         admitted[entry.key] = entry.tag
         if fits then budget = budget - cost end
         if not continuing then credit = max(0, credit - cost) end
+      else
+        -- Diagnostics only: count the actual failed predicates at this point
+        -- in the existing admission order. Both can fail for the same entry;
+        -- a successful reflex override is not a rejection. These are not
+        -- exclusive causes and say nothing about a later damage event.
+        if not fits then result.capacity_blocked_count = result.capacity_blocked_count + 1 end
+        if not paid then result.credit_blocked_count = result.credit_blocked_count + 1 end
       end
     end
     state.attention_set = admitted
@@ -1010,6 +1026,10 @@ local function planAttention(player, game_side, cfg, a, state, reach)
       tracked, seen_cost = tracked + 1, seen_cost + entry.cost
     else
       skipped = skipped + 1
+      -- No acquisition scan occurred this callback. Include all current
+      -- untracked relevant entries, even ones rejected by an earlier scan:
+      -- this is a waiting snapshot, not proof the interval alone hid them.
+      if not result.scanned then result.waiting_scan_count = result.waiting_scan_count + 1 end
       if entry.imminent then
         blind, blind_cost = blind + 1, blind_cost + entry.cost
         if entry.ttc < nearest_ttc then
@@ -1069,7 +1089,9 @@ local function choose(game_side, state, cfg, intent)
     attention_panic = false, attention_escape = false, attention_load = 0, attention_seen_cost = 0,
     attention_skipped = 0, attention_blind_cost = 0, attention_nearest_blind = -1,
     attention_nearest_cost = 0, attention_nearest_speed = 0, attention_budget = 0, attention_credit = 0,
-    attention_entries = 0, attention_reach = 0, attention_free = 0 }
+    attention_entries = 0, attention_reach = 0, attention_free = 0,
+    attention_scanned = false, attention_waiting_scan_count = 0,
+    attention_credit_blocked_count = 0, attention_capacity_blocked_count = 0 }
   local model = movementModel(player, cfg, stats)
   local candidates = buildCandidates(player, cfg, model, stats, intent)
   candidates = heightCandidates(candidates, player, cfg, intent, stats)
@@ -1096,6 +1118,10 @@ local function choose(game_side, state, cfg, intent)
     stats.attention_entries = attention_result.entries
     stats.attention_reach = attention_result.reach
     stats.attention_free = #attention_result.free
+    stats.attention_scanned = attention_result.scanned
+    stats.attention_waiting_scan_count = attention_result.waiting_scan_count
+    stats.attention_credit_blocked_count = attention_result.credit_blocked_count
+    stats.attention_capacity_blocked_count = attention_result.capacity_blocked_count
   end
   if attention_result then
     -- Score exactly the objects the attention pass produced: admitted plus the
@@ -1197,6 +1223,7 @@ local function choose(game_side, state, cfg, intent)
     if #coarse > 0 then pool = coarse end
   end
   local best = pick(pool)
+  local eligible_pool = pool
   local cap_forced, cap_risk = false, false
   if movementCap(state, cfg) and stay.danger > 0 and state.last_move_dir ~= nil then
     -- Human-like cap: while the rolling change budget or the dwell time forbids
@@ -1226,6 +1253,7 @@ local function choose(game_side, state, cfg, intent)
         cap_risk = (best.danger < kept.danger) or (not best.collides and kept.collides)
       end
       best = kept
+      eligible_pool = restricted
     end
   end
   recordMove(state, best.vx, best.vy, stay.danger > 0)
@@ -1251,6 +1279,18 @@ local function choose(game_side, state, cfg, intent)
   best.attention_reach = stats.attention_reach or 0
   best.attention_free = stats.attention_free or 0
   for name, value in pairs(stats) do best[name] = value end
+  -- Resource policy sees only the routes the movement policy can actually
+  -- select now, after height, panic and movement-cap restrictions. "Safe"
+  -- means no known hard contact in this short forecast, not proven survival.
+  -- Hypothetical protected-route tails never contribute collision timing.
+  local safe_routes = 0
+  for _, candidate in ipairs(eligible_pool) do
+    if not candidate.collides then safe_routes = safe_routes + 1 end
+  end
+  best.rescue_observed = true
+  best.rescue_routes_total, best.rescue_routes_safe = #eligible_pool, safe_routes
+  best.rescue_known_ttc = best.first_collision or -1
+  best.first_collision = nil
   return best
 end
 

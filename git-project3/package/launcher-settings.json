@@ -17,7 +17,6 @@
     "difficulty": "human200",
     "move_change_budget": 6,
     "vision_radius": 149.333333333333,
-    "plan_interval": 6,
     "reflex_radius": 10,
     "sight_radius": 20,
     "blind_urgent_limit": 3,

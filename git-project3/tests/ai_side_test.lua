@@ -39,6 +39,7 @@ local function fixture(selected, seconds)
   cfg.debug_log, cfg.debug_log_interval_frames = true, 1
   f.own = side(player(0, 320, 400))
   f.other = side(player(120, 180, 17))
+  f.own.player.character, f.other.player.character = 13, 9
   f.other.player.life, f.other.player.spellPoint, f.other.player.combo = 2, 900000, 99
   f.other.player.sensor.opponent.chargeCurrent, f.other.player.sensor.opponent.chargeMax = 290, 399
   f.other.player.sensor.state, f.other.chargeType = 0, ChargeType.Charge
@@ -107,13 +108,13 @@ local function fixture(selected, seconds)
   end
   real_dofile('main.lua')
   local header = split(f.output[1])
-  eq(#header, 169, '3.5 appends C1 diagnostics after the 162 original columns')
+  eq(#header, 197, '3.6 appends metadata after the 169 original columns')
   function f.step()
     local rows = #f.output
     main()
     if #f.output == rows then return nil end
     local values, result = split(f.output[#f.output]), {}
-    eq(#values, 169, 'CSV row width')
+    eq(#values, 197, 'CSV row width')
     for index, name in ipairs(header) do result[name] = values[index] end
     return result
   end
@@ -128,6 +129,13 @@ for selected = 1, 2 do
   eq(row.life, '10', 'own life must reach diagnostics')
   eq(row.spell_point, '12345', 'own score must reach diagnostics')
   eq(row.max_charge, '400', 'own gauge must reach diagnostics')
+  eq(row.ai_version, '3.7.0-test', 'diagnostic version must identify the running code')
+  eq(tonumber(row.ai_side), selected, 'diagnostic side must follow the actual selected side')
+  eq(row.ai_character, '13', 'AI character must come from the selected upstream player')
+  eq(row.opponent_character, '9', 'opponent character must come from the opposite player')
+  eq(row.charge_speed, '10', 'actual charge speed must be logged')
+  eq(row.charge_warmup_frames, '0', 'zero remaining warmup is valid')
+  eq(row.time_scale, '1', 'actual time scale must be logged')
   eq(row.opp_charge_current, '70', 'opponent gauge must use selected sensor sub-snapshot')
   eq(row.opp_charge_max, '120', 'opponent gauge must not use the other sensor backwards')
   eq(row.bullets, '21', 'only own bullets belong to this policy')

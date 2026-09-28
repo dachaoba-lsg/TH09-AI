@@ -1,6 +1,6 @@
-﻿param([string] $Version = '0.1.9', [switch] $Overwrite)
+param([string] $Version = '0.1.9.2', [switch] $Overwrite)
 $ErrorActionPreference = 'Stop'
-if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$') { throw 'Invalid package version.' }
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-z0-9]+)?\z') { throw 'Invalid package version.' }
 $dist = Join-Path $PSScriptRoot 'dist\TH09-AI'
 $zipPath = Join-Path $PSScriptRoot ('dist\TH09-AI-v' + $Version + '.zip')
 if ([IO.File]::Exists($zipPath) -and -not $Overwrite) {
@@ -30,13 +30,13 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $allowedPaths = @(
     '^(README\.md|LICENSE\.txt|VERSION\.txt|launcher-settings\.json|prepare-and-start\.ps1|prepare-input\.ps1)$',
     '^(\u542f\u52a8TH09-AI\.cmd|\u4f7f\u7528\u8bf4\u660e\.txt|\u53d1\u5e03\u8bf4\u660e\.md)$',
-    '^ai/(config|main|dodge|keyutils)\.lua$',
+    '^ai/(config|main|dodge|keyutils|poison_navigation)\.lua$',
     '^runtime/(inject\.dll|ka_ai_duka\.exe|th09ai-launcher\.exe|window_support\.(dll|def)|SHA256SUMS\.txt)$',
     '^licenses/(THIRD_PARTY_NOTICES\.txt|boost-LICENSE_1_0\.txt|lua-5\.1\.4\.txt|thprac-MIT\.txt|ka_ai_duka-readme-ja\.txt)$',
     '^licenses/ka_ai_duka/(LICENSE|readme)\.txt$',
     '^licenses/tinycc/(COPYING|GPL-2\.0\.txt|tcc-0\.9\.27\.tar\.bz2)$',
     '^source/[A-Za-z0-9_-]+\.(md|ps1|txt)$',
-    '^source/src/ai/(config|main|dodge|keyutils)\.lua$',
+    '^source/src/ai/(config|main|dodge|keyutils|poison_navigation)\.lua$',
     '^source/src/launcher/(prepare-and-start\.ps1|prepare-input\.ps1|\u542f\u52a8TH09-AI\.cmd)$',
     '^source/src/native/[A-Za-z0-9_-]+\.(c|h|md)$'
 ) -join '|'

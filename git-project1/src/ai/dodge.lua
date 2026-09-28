@@ -1,4 +1,5 @@
 local keys = dofile("keyutils.lua")
+local poison_navigation = dofile("poison_navigation.lua")
 local abs, min, max, sqrt = math.abs, math.min, math.max, math.sqrt
 local INF, DIAGONAL = math.huge, 1 / math.sqrt(2)
 local DIRECTIONS = {
@@ -518,11 +519,12 @@ local function choose(game_side, state, cfg)
     for _, object in ipairs(game_side[kind]) do scoreObject(player, object, tag, candidates, cfg, stats, previous_lasers, next_lasers, frame) end
   end
   state.laser_history, state.laser_frame = next_lasers, frame
+  poison_navigation.score(player, candidates, state, cfg, stats, frame)
   local stay, best = candidates[1], candidates[1]
   -- Hysteresis only applies while standing still faces danger. Empty screens
   -- therefore do not preserve a needless moving direction forever.
   for _, candidate in ipairs(candidates) do
-    candidate.cost = candidate.danger + candidate.position_cost
+    candidate.cost = candidate.danger + candidate.position_cost + candidate.poison_cost
     if stay.danger > 0 and state.last_move_key ~= nil and candidate.key ~= state.last_move_key then
       candidate.cost = candidate.cost + cfg.direction_change_cost
     end

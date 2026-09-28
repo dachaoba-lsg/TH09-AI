@@ -1,3 +1,16 @@
+DS-TH09-AI 3.7.0-test 当前补充说明（2026-09-28）
+
+自 3.6.1 起，发行 runtime/inject.dll 不再是逐字节未修改的上游文件。
+本项目公开的 src/native/inject_guard_builder.c 从经哈希核验的
+ka_ai_duka v1.7 inject.dll 确定性追加 1P 授权入口保护；它保留原有
+函数地址和 2P 逻辑，不从本项目源码重新编译上游 C++ 运行库。
+runtime/ka_ai_duka.exe 仍保持原发行文件。下文“磁盘文件未修改”
+只描述 0.1.8 的历史实现，不适用于当前带 guard 的 inject.dll。
+上游代码和依赖继续遵守各自许可，新增构建工具及保护代码的 MIT
+许可不替代上游许可；下列原始许可文件与对应源码材料均完整保留。
+
+---
+
 TH09-AI 0.1.8 — 第三方声明 / Third-party notices
 核对日期：2026-09-20
 

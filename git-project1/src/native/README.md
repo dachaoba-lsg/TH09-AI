@@ -1,4 +1,21 @@
-# TH09-AI native support (0.1.9)
+# TH09-AI native support (0.1.9.2)
+
+The 0.1.9.2 release changes Lua movement preferences, not the native sensing
+interface. It retains the 0.1.9 read-only player/poison/protection snapshot and
+apiVersion 1; no new native fields or game-memory writes are introduced. Soft
+poison risk and a bounded escape target encourage leaving dense poison while
+near-term collision avoidance takes priority. Random C, the 500,000-point Z
+lock and no X remain unchanged; this is not constant-motion enforcement,
+training or poison-triggered C coordination.
+
+The added source is `src/ai/poison_navigation.lua`, not a new native module.
+`dodge.poison_navigation` defaults to enabled=true, risk_weight=80,
+progress_weight=6, replan_frames=12. The numeric bounds are 0..1000, 0..100 and
+1..60 respectively, with the interval rounded down. Disabling it only restores
+the earlier movement preference; poison-speed prediction remains enabled.
+The target search has at most 16 x 8 endpoints within 128 internal units. It is
+a terrain preference, not full-path collision verification or exact poisoned
+arrival-time planning.
 
 Only the known Japanese v1.50a executable and original ka_ai_duka v1.7 DLL
 are supported. Their original disk files remain unchanged. The launcher creates
@@ -37,8 +54,8 @@ laser_history_resets (continuous histories rejected for excessive geometry
 jumps). First sightings or missing-frame history do not count as resets.
 The first three counts include distant lasers; sweep tests count one tested
 candidate interval even when it includes both hard-collision and near-miss
-checks. No new player-facing
-configuration fields are required; debug_log remains false by default.
+checks. These native laser diagnostics require no extra player setting;
+debug_log remains false by default.
 
 The matching Lua layer tracks stable IDs across consecutive frames to estimate
 hitBody origin, length, thickness and angle changes for limited-horizon laser
@@ -48,16 +65,16 @@ Marisa EX white-light emitters are not solid obstacles, and zero-thickness laser
 remain soft warnings at every length; warning_laser_min_length only controls
 additional virtual thickness, never whether a zero-height record is a hard
 collision. The native sensor and Lua change must ship together;
-replacing dodge.lua alone is incomplete. Use the complete 0.1.9 package and keep
-the old 0.1.8 ZIP separately.
+replacing dodge.lua alone is incomplete. Use the complete 0.1.9.2 package and keep
+the old 0.1.9 and earlier ZIPs separately. Packaging does not replace installed
+game folders automatically.
 
 Version 0.1.9 adds read-only sensing of effective poisoned movement speed,
 temporary protection and recharge-related state. The corresponding Lua planner
 models Medicine poison as nonlethal slowing terrain, uses effective speed for
 candidate paths, and accounts for danger after protection expires. The sensor
 does not change game poison, protection, recharge or HP values and does not
-grant 2P protection. This is the first poison test package; real-battle acceptance
-is pending player testing.
+grant 2P protection. This native sensing baseline is retained by 0.1.9.2.
 
 player_sensor.c/.h appends a Lua-owned `player.sensor` table after the verified
 upstream player export. It never writes the raw game player, poison or EX
@@ -100,7 +117,8 @@ player_sensor: install=FAILED reason=...
 
 An installation failure prevents game resumption. This differs from a transient
 runtime-invalid snapshot, which releases AI inputs rather than terminating the
-running game. No new user-facing configuration fields are introduced.
+running game. No new native sensor settings are introduced by 0.1.9.2; Lua
+movement settings and diagnostics are documented in the player README.
 
 The CSV adds sensor_valid, move_scale_x, move_scale_y, protection_frames,
 can_charge, charge_block_frames, poison_clouds, movement_segments and player_state.
@@ -109,6 +127,12 @@ planner's one-update-shorter protection. poison_clouds counts reachable clouds
 that can be active within the horizon; movement_segments totals parsed route
 segments for all 17 candidates. These are not total scene cloud counts or
 executed movement counts.
+
+0.1.9.2 appends eight Lua-only CSV columns: poison_nav_active, poison_level,
+poison_risk, poison_cost, poison_target_x, poison_target_y, poison_probe_count,
+poison_nav_samples (42 columns total). No field is added to player.sensor.
+The player README defines their scope; in particular, active means any candidate
+has nonzero navigation cost, while poison_cost belongs to the selected candidate.
 
 Adaptive proactive C attacks and high-level energy planning remain unimplemented.
 Random C1-C4, insufficient-energy tap shots, the
@@ -214,7 +238,7 @@ not a replacement for a real selection/battle/mouse-drag acceptance test.
 Earlier releases passed launcher, Lua, machine-code simulation and owned-window
 regressions. Earlier user acceptance confirmed dragging and invincibility, with
 two protected hits still at HP 10 in no-damage logs. These are prior-version
-observations, not real-battle acceptance for 0.1.9 poison handling.
+observations, not real-battle acceptance for 0.1.9.2 poison escape.
 
 Completed 0.1.9 checks: 432 player-sensor selftest assertions; owned-window and
 laser selftests; 6 real upstream x86 player-export relocation cases; 36 laser
@@ -224,6 +248,17 @@ support combinations with successful player/laser sensor installation; 497
 launcher assertions and 65 path assertions. JSON seconds propagated through
 the real launcher to the Lua 60-active-callback input-stop latch successfully.
 The suspended-start checks never created a game window or sent game input.
-Player testing with Medicine is still required. Collect video, ai/ai_debug.csv
-and runtime/native-window.log for failures.
+The listed native, ABI, input, practice, suspended-start, launcher, path and
+timer checks were repeated and passed for 0.1.9.2. The current Lua checks also
+passed: 13 navigation groups, 11 navigation benchmark scenarios, ordinary/laser/
+poison-speed regressions, prior performance suites, mock behavior, 42-column CSV
+and 1,440-state random-C parity. Public ZIP and source-rebuild results are kept
+in the release delivery test report, not implied by native compilation.
+
+The benchmark includes 256 clouds with 2,000 bullets and verifies the 128-probe /
+172-sample bounds. Extreme synthetic cases may exceed 16.67 ms before game and
+native export costs; no game-FPS guarantee is made. Two received 0.1.9 recordings
+showed repeated stopping and lack of relocation after bullet clears; they do
+not test the new movement policy. New player testing with Medicine is still
+required. Collect video, ai/ai_debug.csv and runtime/native-window.log for failures.
 Geometry/prediction simulations cannot guarantee survival against every attack.

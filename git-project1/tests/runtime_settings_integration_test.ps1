@@ -19,7 +19,7 @@ $ai = Join-Path $package 'ai'
 foreach ($name in @('inject.dll', 'window_support.dll', 'th09ai-launcher.exe')) {
     [IO.File]::Copy((Join-Path $project ('dist\TH09-AI\runtime\' + $name)), (Join-Path $runtime $name))
 }
-foreach ($name in @('main.lua', 'config.lua', 'dodge.lua', 'keyutils.lua')) {
+foreach ($name in @('main.lua', 'config.lua', 'dodge.lua', 'keyutils.lua', 'poison_navigation.lua')) {
     [IO.File]::Copy((Join-Path $project ('src\ai\' + $name)), (Join-Path $ai $name))
 }
 foreach ($name in @('prepare-input.ps1', 'prepare-and-start.ps1')) {
