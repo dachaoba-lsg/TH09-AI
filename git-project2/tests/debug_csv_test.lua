@@ -36,7 +36,7 @@ local function columns(line)
   return result
 end
 local header, first, second = columns(output[1]), columns(output[2]), columns(output[3])
-assert(#header == 113 and #first == 113 and #second == 113, 'CSV columns not aligned')
+assert(#header == 118 and #first == 118 and #second == 118, 'CSV columns not aligned')
 local map = {}; for index,name in ipairs(header) do map[name]=index end
 assert(tonumber(first[map.laser_count]) == 1, 'laser count missing from diagnostics')
 assert(tonumber(first[map.tracked_lasers]) == 0, 'first frame must not invent history')
@@ -73,4 +73,8 @@ assert(first[map.followup_confirmed] == 'false' and tonumber(first[map.followup_
 assert(first[map.c1_damage_model_valid]=='false' and tonumber(first[map.c1_kill_count])==0 and
  tonumber(first[map.c1_contact_count])==0 and tonumber(first[map.c1_kill_delay])==0,
  'empty scene invented Reimu kill or damage proof')
- print('PASS: in-memory main-loop CSV integration, 113 matching columns, C2 resources/cadence/position/height/follow-up/route/Reimu damage, no X')
+assert(first[map.poison_preference]=='false' and first[map.poison_escape_changed]=='false',
+ 'unknown time scale enabled poison route preference')
+assert(tonumber(first[map.poison_exposure])==0 and tonumber(first[map.poison_layers_end])==0,
+ 'inactive poison preference invented route metrics')
+ print('PASS: in-memory main-loop CSV integration, 118 matching columns, bloom/Reimu/poison route, no X')

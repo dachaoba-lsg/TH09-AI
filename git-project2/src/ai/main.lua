@@ -56,6 +56,7 @@ local columns = {
   "protected_route_checked", "protected_route_collides", "post_c2_phase", "post_c2_age",
   "post_c2_target_y", "cadence_limit", "bloom_cadence",
   "c1_damage_model_valid", "c1_kill_count", "c1_contact_count", "c1_kill_delay",
+  "poison_preference", "poison_layers_now", "poison_layers_end", "poison_exposure", "poison_escape_changed",
 }
 local debug_file = nil
 if config.debug_log then
@@ -107,6 +108,8 @@ local function writeDebug(side, player, movement, plan, obs, observe_ms, bloom_m
     movement.protected_route_collides == true, plan.post_c2_phase, plan.post_c2_age,
     plan.post_c2_target_y, plan.cadence_limit, plan.bloom_cadence,
     c1.damage_model_valid == true, c1.kill_count or 0, c1.contact_count or 0, c1.kill_delay or 0,
+    movement.poison_preference == true, movement.poison_layers_now or 0,
+    movement.poison_layers_end or 0, movement.poison_exposure or 0, movement.poison_escape_changed == true,
   }
   for index = 1, #columns do values[index] = tostring(values[index] == nil and "" or values[index]) end
   debug_file:write(table.concat(values, ",") .. "\n")

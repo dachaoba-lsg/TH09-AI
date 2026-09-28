@@ -42,7 +42,7 @@ local function movementModel(player, cfg, stats)
         or (cloud.active == false and INF or 0)
       if active_from < cfg.prediction_frames then
         model.clouds[#model.clouds + 1] = { x = cloud.x, y = cloud.y, radius = cloud.radius,
-          framesLeft = cloud.framesLeft, activeFrom = active_from }
+          framesLeft = cloud.framesLeft, activeFrom = active_from, activeNow = cloud.active }
       end
     end
   end
@@ -620,6 +620,91 @@ local function intentCost(candidate, player, cfg, intent)
   return cost
 end
 
+-- Poison concentration is the number of overlapping active clouds, not the
+-- rendered fog opacity. Penetration depth is ONLY an escape tie-break inside
+-- equal layers; it never changes the existing per-cloud 0.4 movement physics.
+local function poisonAt(model, x, y, time, depth)
+  local layers, inside = 0, INF
+  for _, cloud in ipairs(model.clouds) do
+    local active = time >= cloud.activeFrom and time < cloud.framesLeft
+    -- The current native flag uses integer Timer age; do not replace it with
+    -- a rounded floating Timer calculation when deciding whether to flee.
+    if time == 0 and type(cloud.activeNow) == 'boolean' then active = cloud.activeNow end
+    if active then
+      local distance2 = (x - cloud.x)^2 + (y - cloud.y)^2
+      if distance2 < cloud.radius^2 then
+        layers = layers + 1
+        if depth then inside = min(inside, cloud.radius - sqrt(distance2)) end
+      end
+    end
+  end
+  return layers, inside == INF and 0 or inside
+end
+
+local function poisonRoute(candidate, model, horizon)
+  local samples, part, total = min(12, max(1, math.ceil(horizon))), 1, 0
+  -- Same bounded update sampling as the existing poisoned movement forecast.
+  -- Use its actual slowed/clipped positions, never nominal speed endpoints.
+  for i = 0, samples - 1 do
+    local time = horizon * i / samples
+    while part < #candidate.segments and time >= candidate.segments[part].start + candidate.segments[part].duration do
+      part = part + 1
+    end
+    local segment = candidate.segments[part]
+    local dt = time - segment.start
+    total = total + poisonAt(model, segment.x + segment.vx * dt, segment.y + segment.vy * dt, time, false)
+  end
+  candidate.poison_exposure = total / samples -- mean active layers along route
+  candidate.poison_layers_end, candidate.poison_depth = poisonAt(model,
+    candidate.terminal_x, candidate.terminal_y, horizon, true)
+end
+
+local function preferLessPoison(best, baseline, candidates, player, model, cfg, intent, stats)
+  local sensor = player.sensor
+  if cfg.poison_escape_enabled == false or not model or not sensor or sensor.apiVersion ~= 1
+    or sensor.timeScale ~= 1 or sensor.cutIn == true or sensor.movementEnabled == false
+    or not finite(cfg.prediction_frames) or cfg.prediction_frames <= 0 then return best end
+  local layers = poisonAt(model, player.x, player.y, 0, false)
+  stats.poison_layers_now = layers
+  if layers == 0 or best.collides then return best end
+  -- Do not override a failed post-C2 expiry-route search with a claimed escape.
+  if stats.protected_route_checked and not best.protected_route_usable then return best end
+  stats.poison_preference = true
+  local initial, selected = best, best
+  poisonRoute(best, model, cfg.prediction_frames)
+  local risk_budget = min(6, max(0, cfg.near_miss_cost or 0) * 0.04)
+  local function less(a,b)
+    if abs(a.poison_exposure-b.poison_exposure)>1e-7 then return a.poison_exposure<b.poison_exposure end
+    if a.poison_layers_end~=b.poison_layers_end then return a.poison_layers_end<b.poison_layers_end end
+    if abs(a.poison_depth-b.poison_depth)>1e-7 then return a.poison_depth<b.poison_depth end
+    local function originalScore(c)
+      return c.original_cost + (intent and intentCost(c, player, cfg, intent) or 0)
+        + (stats.protected_route_checked and c.protected_route_danger or 0)
+    end
+    return originalScore(a) < originalScore(b) - 1e-9
+  end
+  for _, candidate in ipairs(candidates) do
+    -- Keep the bloom/dodge-selected Shift state. Poison must not cancel a
+    -- capture window or add low-speed frames that reduce fairy-team supply.
+    -- Anchor safety to the ORIGINAL geometric baseline, not an already-spent
+    -- bloom risk allowance. No additive risk budgets and no bought collision.
+    if candidate ~= initial and candidate.focus == initial.focus and not candidate.collides
+      and candidate.terrain_cost <= baseline.terrain_cost + 1e-9
+      and candidate.danger <= baseline.danger + risk_budget + 1e-9
+      and (not stats.protected_route_checked or candidate.protected_route_usable) then
+      poisonRoute(candidate, model, cfg.prediction_frames)
+      if less(candidate, selected) then selected = candidate end
+    end
+  end
+  stats.poison_escape_changed = selected.key ~= initial.key
+  if selected ~= initial then
+    selected.intent_cost = intent and intentCost(selected, player, cfg, intent) or 0
+    selected.cost = selected.cost + selected.intent_cost
+      + (stats.protected_route_checked and selected.protected_route_danger or 0)
+  end
+  return selected
+end
+
 local function choose(game_side, state, cfg, intent)
   if type(intent) ~= "table" then intent = nil end
   local player = game_side.player
@@ -628,7 +713,8 @@ local function choose(game_side, state, cfg, intent)
     sensor_valid = 0, poison_clouds = 0, movement_segments = 0, protection_frames = 0,
     height_limited = false, height_recovering = false, height_rejected = 0,
     protected_route_checked = false, protected_route_horizon = 0,
-    protected_route_tests = 0, protected_route_rejected = 0 }
+    protected_route_tests = 0, protected_route_rejected = 0,
+    poison_preference = false, poison_escape_changed = false, poison_layers_now = 0 }
   local model = movementModel(player, cfg, stats)
   local candidates = buildCandidates(player, cfg, model, stats, intent)
   candidates = heightCandidates(candidates, player, cfg, intent, stats)
@@ -656,11 +742,13 @@ local function choose(game_side, state, cfg, intent)
     if stay.danger > 0 and last_direction ~= nil and direction ~= last_direction then
       candidate.cost = candidate.cost + cfg.direction_change_cost
     end
+    candidate.original_cost = candidate.cost
     -- A real collision cannot be outweighed by wall/position preferences or
     -- direction hysteresis, even if contact occurs exactly at the horizon.
     if (best.collides and not candidate.collides)
       or (best.collides == candidate.collides and candidate.cost < best.cost) then best = candidate end
   end
+  local geometric_best = best
   if intent and not best.collides then
     local baseline, best_score = best, best.cost + intentCost(best, player, cfg, intent)
     -- Permit a small, nonzero soft-risk band so resource positioning is not
@@ -698,6 +786,10 @@ local function choose(game_side, state, cfg, intent)
     -- If every path collides, retain the original escape ranking.
     best.intent_cost = 0
   end
+  best = preferLessPoison(best, geometric_best, candidates, player, model, cfg, intent, stats)
+  best.poison_exposure = best.poison_exposure or 0
+  best.poison_layers_end = best.poison_layers_end or 0
+  best.poison_depth = best.poison_depth or 0
   best.protected_route_safe = stats.protected_route_checked and not best.collides
     and best.protected_route_usable == true
   best.protected_route_collides = best.protected_route_collides == true

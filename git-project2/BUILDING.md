@@ -1,4 +1,4 @@
-# TH09-AI 2.0.7：源码构建
+# TH09-AI 2.0.8：源码构建
 
 本页适用于 Git 源码仓库。完整玩家 ZIP 中的 `source/rebuild-from-package.ps1` 是另一条重建入口，需要保留 ZIP 的外层运行库、许可和文档；不要单独拿出它代替本仓库入口。
 
@@ -23,10 +23,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 入口调用 `scripts/prepare-dependencies.ps1`，下载锁定版本的上游运行库并核对 SHA-256，放入本地 `vendor/`。校验失败时应检查下载和锁定信息，不要跳过校验。随后从 `src/native/` 编译本项目的启动器与支持模块，执行原生自测，把 `src/ai/`、`src/launcher/`、`package/` 和 `licenses/` 组装成发行包并运行公开包验收。
 
-默认版本为 `2.0.7`。产物为：
+默认版本为 `2.0.8`。产物为：
 
 ```text
-dist/TH09-AI-v2.0.7.zip       含运行文件、项目源码及第三方材料的发行 ZIP
+dist/TH09-AI-v2.0.8.zip       含运行文件、项目源码及第三方材料的发行 ZIP
 dist/TH09-AI/                 构建暂存目录
 work/                        自测、临时文件和构建记录
 vendor/                      已校验的上游依赖缓存
@@ -35,7 +35,7 @@ downloads/                   已校验的下载归档缓存
 
 ZIP 外层包名为 `TH09-AI`。生成过程不安装到游戏目录，也不启动游戏。原生窗口自测可能创建自己的隐藏测试窗口。
 
-已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '2.0.7-local'` 标识自己的构建，这不表示原发行者审核了修改。
+已有同名 ZIP 时默认拒绝覆盖；需要覆盖本地构建产物时显式添加 `-Overwrite`。也可用 `-Version '2.0.8-local'` 标识自己的构建，这不表示原发行者审核了修改。
 
 ## 离线重建
 
@@ -61,6 +61,12 @@ python tests/run_all_lua.py
 测试入口自动发现当前 `*_test.lua` 套件，每套使用独立的 Lua 5.1 进程；日志和结果 JSON 写入 `work/test-results/`。旧版性能对照依赖未公开的历史快照，缺失时明确报告 `SKIP`，当前版本检查仍运行；对照时间列的 0 不表示测得零耗时。微基准不是游戏 FPS。
 
 失败时保留完整错误、命令和版本用于定位。离线 Lua 与原生自测通过，并不等于已经验证游戏中的生存表现。
+
+## 2.0.8 低毒方向回归
+
+新增 `tests/poison_preference_test.lua` 与 `tests/poison_preference_perf_test.lua`，已由统一入口自动发现。两套使用当前版开启/关闭偏好的合成输入对照，不需要私有历史源码。其他旧版可选比较缺少快照时仍明确报告 SKIP，不能把该对照计为已经执行；当前版本断言继续运行。便携测试入口和依赖安装方式保持原样。
+
+开发交付记录为 23 套 Lua 通过、原包与独立随包源码重建各 246 项检查通过。这里引用的是此前开发证据，本次源码整理未重新执行完整套件或构建；实战仍待用户验收。新算法继续使用第二代六个 Lua 模块，不包含第三代 `poison_navigation.lua`。
 
 ## 可选：真实启动配置集成测试
 

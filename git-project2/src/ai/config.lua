@@ -74,6 +74,9 @@ return {
   -- fallible against long-term traps such as several converging C3 shots.
   dodge = {
     prediction_frames = 12,
+    -- While inside active poison, prefer less layer exposure within the
+    -- existing safety band; preserve the bloom-selected Shift state.
+    poison_escape_enabled = true,
     -- Swept bounds automatically include object velocity and player travel.
     safety_margin = 4,
     warning_laser_virtual_half_thickness = 12,

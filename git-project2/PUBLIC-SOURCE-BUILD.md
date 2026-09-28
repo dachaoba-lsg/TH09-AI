@@ -1,3 +1,21 @@
+# TH09-AI 2.0.8：开花机兼容毒优化与源码构建
+
+本版只在当前实际生效毒中，沿原真实减速路线和原安全预算，在与原最终选择相同的 Shift 状态下偏向少毒层/近边界方向。固灵、C1/C2、连爆策略、原生与输入保持；严重叠毒仍可能无路可走。CSV 从 113 列追加至 118 列。
+
+Git 源码仓库在根目录运行 `build-from-source.ps1 -CompilerPath <完整 tcc.exe 路径>`，使用保留的依赖准备和 package 模板；完整方法见 Git 仓库的 `BUILDING.md`。
+
+完整玩家 ZIP 的 `source/` 是独立布局，保留外层运行文件和许可，在该目录运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\rebuild-from-package.ps1 -CompilerPath 'C:\tools\tcc\tcc.exe' -Version 2.0.8
+```
+
+使用完整 TinyCC 0.9.27 win32。六个 Lua 模块必须整包配套，不套用第三代毒导航模块。构建不会安装或启动游戏；已有 ZIP 默认拒绝覆盖。此前开发交付记录的 23 套 Lua、原包与重建各 246 项包检查属于历史验证，本次公开同步没有重复完整构建或测试，实战尚待用户验收。
+
+---
+
+以下保留历史构建资料；旧版号和旧测试结论仅对应各自版本，当前入口与默认版本以上文及脚本为准。
+
 # TH09-AI 2.0.5 开花测试版随包源码与重建
 
 本文件在玩家压缩包中位于 `TH09-AI/source/BUILD.md`。同目录的 `README.md` 是开发说明；玩家使用方法在上一级 `README.md` 和 `使用说明.txt`。
