@@ -70,13 +70,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 ~~~~~
 
-通过网盘分享的文件：1.9版本说明.zip
-
-链接: https://pan.baidu.com/s/1vc0cRYVTq8qNAdX63zw6vw?pwd=utju 提取码: utju 
-
+通过网盘分享的文件：TH09-AI-v0.1.9.2.zip
+链接: https://pan.baidu.com/s/1K9lM6VC82QAucCoiZHAMXA?pwd=d664 提取码: d664 
 --来自百度网盘超级会员v3的分享
 
-版本：0.1.9。AI现在可以打毒机了，有望成为人最难打的AI。
+版本：0.1.9.2。AI现在可以打毒机了，有望成为最难打的AI。
 
 
 ~~~~
@@ -93,8 +91,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 ~~~~
 
-通过网盘分享的文件：3.5包.zip
-链接: https://pan.baidu.com/s/1GcfG279_kfeP4t-T3Y9JCQ?pwd=xcqy 提取码: xcqy 
+通过网盘分享的文件：3.7包.zip
+链接: https://pan.baidu.com/s/1SvYOvmcUnRHVJQ2jDB4Wmg?pwd=4npc 提取码: 4npc 
 --来自百度网盘超级会员v3的分享
-版本：3.5.0-test。AI添加自定义注意力 视野 1秒操作次数配置，设置AI难度，更像人（参数不同决定灵梦的C2白弹圈C不C）
+版本：3.7.0-test。AI添加自定义注意力 视野 1秒操作次数配置，设置AI难度，更像人（参数不同决定灵梦的C2白弹圈C不C）
 ~~~~
