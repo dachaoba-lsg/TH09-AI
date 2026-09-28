@@ -91,6 +91,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 
 ~~~~
 
+通过网盘分享的文件：3.5包.zip
+链接: https://pan.baidu.com/s/1fFttmgSwt1ajK_edNqghAw?pwd=ibv8 提取码: ibv8 
+--来自百度网盘超级会员v3的分享
+
 通过网盘分享的文件：3.7包.zip
 链接: https://pan.baidu.com/s/1SvYOvmcUnRHVJQ2jDB4Wmg?pwd=4npc 提取码: 4npc 
 --来自百度网盘超级会员v3的分享
