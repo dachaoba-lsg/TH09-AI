@@ -90,15 +90,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-from-source.ps1 
 版本：2.0.7。AI去除停枪，随机C行为，主动打连爆，主动放C2，可以成为开花机练习器
 
 ~~~~
-
-通过网盘分享的文件：3.5包.zip
-链接: https://pan.baidu.com/s/1fFttmgSwt1ajK_edNqghAw?pwd=ibv8 提取码: ibv8 
+通过网盘分享的文件：3.9包.zip
+链接: https://pan.baidu.com/s/1DYXjFGpLtKMQtCUguiI0iA?pwd=q2xc 提取码: q2xc 
 --来自百度网盘超级会员v3的分享
-3.5版本避弹性能较为稳定
 
-
-通过网盘分享的文件：3.7包.zip
-链接: https://pan.baidu.com/s/1SvYOvmcUnRHVJQ2jDB4Wmg?pwd=4npc 提取码: 4npc 
---来自百度网盘超级会员v3的分享
-版本：3.7.0-test。AI添加自定义注意力 视野 1秒操作次数配置，设置AI难度，更像人（参数不同决定灵梦的C2白弹圈C不C）
 ~~~~
